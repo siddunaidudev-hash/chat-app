@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Chat App</title>
+  <style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background-color: #1a1a2e; font-family: Arial, sans-serif; height: 100vh; display: flex; justify-content: center; align-items: center; }
+#chat-box { width: 420px; height: 620px; background-color: #16213e; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; }
+#top-bar { background-color: #0f3460; padding: 16px 20px; color: white; }
+#messages { flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.message-bubble { background-color: #0f3460; color: white; padding: 10px 14px; border-radius: 12px; max-width: 75%; align-self: flex-end; display: flex; flex-direction: column; gap: 4px; }
+.sender { font-size: 11px; color: #e94560; font-weight: bold; }
+.text { font-size: 14px; }
+.time { font-size: 10px; color: #aaaaaa; align-self: flex-end; }
+#input-area { display: flex; padding: 12px; gap: 8px; border-top: 1px solid #0f3460; }
+#message-input { flex: 1; padding: 10px 14px; background-color: #0f3460; color: white; border: none; border-radius: 20px; font-size: 14px; outline: none; }
+button { padding: 10px 20px; background-color: #e94560; color: white; border: none; border-radius: 20px; cursor: pointer; font-size: 14px; font-weight: bold; }
+#name-popup { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; z-index: 999; }
+#name-box { background: #16213e; padding: 40px; border-radius: 16px; text-align: center; display: flex; flex-direction: column; gap: 16px; width: 300px; }
+#name-box h2 { color: white; font-size: 20px; }
+#name-box p { color: #aaaaaa; font-size: 14px; }
+#name-input { padding: 10px 14px; background: #0f3460; color: white; border: none; border-radius: 20px; font-size: 14px; outline: none; text-align: center; }
+</style>
+</head>
+<body>
+
+  <div id="name-popup">
+  <div id="name-box">
+    <h2>💬 My Chat App</h2>
+    <p>Enter your name to start chatting</p>
+    <input type="text" id="name-input" placeholder="Your name...">
+    <button onclick="joinChat()">Join Chat</button>
+  </div>
+</div>
+<div id="chat-box"></div>
+
+    <div id="top-bar">
+      <h2>💬 My Chat App</h2>
+    </div>
+
+    <div id="messages"></div>
+
+    <div id="input-area">
+      <input type="text" id="message-input" placeholder="Type a message...">
+      <button onclick="sendMessage()">Send</button>
+    </div>
+
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+const socket = io();
+let myName = '';
+function joinChat() {
+  const nameInput = document.getElementById('name-input');
+  const name = nameInput.value.trim();
+  if (name === '') return;
+  myName = name;
+  document.getElementById('name-popup').style.display = 'none';
+  setTimeout(() => { document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight; }, 200);
+}
+
+function sendMessage() {
+  const input = document.getElementById('message-input');
+  const text = input.value.trim();
+  if (text === '') return;
+  socket.emit('send_message', {
+    sender: myName,
+    text: text,
+    time: new Date().toLocaleTimeString()
+  });
+  input.value = '';
+}
+
+socket.on('message_history', (messages) => {
+  messages.forEach((data) => {
+    const messages2 = document.getElementById('messages');
+    const bubble = document.createElement('div');
+    bubble.className = 'message-bubble';
+    bubble.innerHTML = '<span class="sender">' + data.sender + '</span><span class="text">' + data.text + '</span><span class="time">' + data.time + '</span>';
+    messages2.appendChild(bubble);
+  });
+});
+socket.on('receive_message', (data) => {
+  const messages = document.getElementById('messages');
+  const bubble = document.createElement('div');
+  bubble.className = 'message-bubble';
+  bubble.innerHTML = '<span class="sender">' + data.sender + '</span><span class="text">' + data.text + '</span><span class="time">' + data.time + '</span>';
+  messages.appendChild(bubble);
+  messages.scrollTop = messages.scrollHeight;
+});
+
+document.getElementById('message-input').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') sendMessage();
+});
+</script>
+
+</body>
+</html>
