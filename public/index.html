@@ -3,99 +3,576 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My Chat App</title>
-  <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { background-color: #1a1a2e; font-family: Arial, sans-serif; height: 100vh; display: flex; justify-content: center; align-items: center; }
-#chat-box { width: 420px; height: 620px; background-color: #16213e; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; }
-#top-bar { background-color: #0f3460; padding: 16px 20px; color: white; }
-#messages { flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
-.message-bubble { background-color: #0f3460; color: white; padding: 10px 14px; border-radius: 12px; max-width: 75%; align-self: flex-end; display: flex; flex-direction: column; gap: 4px; }
-.sender { font-size: 11px; color: #e94560; font-weight: bold; }
-.text { font-size: 14px; }
-.time { font-size: 10px; color: #aaaaaa; align-self: flex-end; }
-#input-area { display: flex; padding: 12px; gap: 8px; border-top: 1px solid #0f3460; }
-#message-input { flex: 1; padding: 10px 14px; background-color: #0f3460; color: white; border: none; border-radius: 20px; font-size: 14px; outline: none; }
-button { padding: 10px 20px; background-color: #e94560; color: white; border: none; border-radius: 20px; cursor: pointer; font-size: 14px; font-weight: bold; }
-#name-popup { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; z-index: 999; }
-#name-box { background: #16213e; padding: 40px; border-radius: 16px; text-align: center; display: flex; flex-direction: column; gap: 16px; width: 300px; }
-#name-box h2 { color: white; font-size: 20px; }
-#name-box p { color: #aaaaaa; font-size: 14px; }
-#name-input { padding: 10px 14px; background: #0f3460; color: white; border: none; border-radius: 20px; font-size: 14px; outline: none; text-align: center; }
-</style>
+  <title>priconkt</title>
+  <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-  <div id="name-popup">
-  <div id="name-box">
+<div id="auth-screen">
+  <div id="auth-box">
     <h2>💬 My Chat App</h2>
-    <p>Enter your name to start chatting</p>
-    <input type="text" id="name-input" placeholder="Your name...">
-    <button onclick="joinChat()">Join Chat</button>
+    <input type="text" id="auth-username" placeholder="Username">
+    <input type="password" id="auth-password" placeholder="Password">
+    <button onclick="register()">Register</button>
+    <button onclick="login()">Login</button>
+    <div id="divider">— or —</div>
+    <button id="google-btn" onclick="window.location.href='/auth/google'">
+      🔵 Continue with Google
+    </button>
+    <p id="auth-message"></p>
   </div>
 </div>
-<div id="chat-box"></div>
 
-    <div id="top-bar">
-      <h2>💬 My Chat App</h2>
+<div id="app-screen" style="display:none;">
+  <div id="sidebar">
+    <div id="sidebar-top">
+      <div id="my-profile">
+        <div id="my-avatar-wrap">
+          <img id="my-avatar" src="" alt="" style="display:none; width:38px; height:38px; border-radius:50%; object-fit:cover;">
+          <span id="my-avatar-initial"></span>
+          <input type="file" id="pic-upload" accept="image/*" style="display:none" onchange="uploadProfilePic(this)">
+          <div id="avatar-overlay" onclick="openMyProfile()">✏️</div>
+        </div>
+        <span id="my-username"></span>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;">
+  <button onclick="openPrivacyCenter()" title="Privacy Center" style="background:#2a3942;border:none;color:#8696a0;border-radius:50%;width:34px;height:34px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;" id="privacy-btn">🛡️</button>      
+  <button id="search-btn" onclick="openSearch()" title="New Chat" style="background:#00a884;border:none;color:white;border-radius:50%;width:34px;height:34px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">🔍</button>
+  <button id="status-btn" onclick="openStatusTab()" title="Status" style="background:#2a3942;border:none;color:#e9edef;border-radius:50%;width:34px;height:34px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">◉</button>
+  <button id="visibility-btn" onclick="toggleVisibility()" title="Visible to Nearby" style="background:#2a3942;border:none;color:#8696a0;border-radius:50%;width:34px;height:34px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">👁️</button>
+  <button id="discover-btn" onclick="openDiscover()" title="Scan Nearby" style="background:#2a3942;border:none;color:#8696a0;border-radius:50%;width:34px;height:34px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">📡</button>
+  <button id="new-group-btn" onclick="showCreateGroup()">+ Group</button>
+</div>
+    </div>
+
+    <div id="create-group-box" style="display:none;">
+      <input type="text" id="group-name-input" placeholder="Group name">
+      <button onclick="createGroup()">Create</button>
+    </div>
+
+    <div id="filter-tabs">
+      <button class="filter-btn active" onclick="setFilter('all')">All</button>
+      <button class="filter-btn" onclick="setFilter('unread')">Unread</button>
+      <button class="filter-btn" onclick="setFilter('groups')">Groups</button>
+    </div>
+
+    <div id="sidebar-tabs">
+      <button class="tab-btn active" onclick="showTab('chats')">Chats</button>
+      <button class="tab-btn" onclick="showTab('groups')">Groups</button>
+    </div>
+
+    <div id="chats-tab"><div id="user-list"></div></div>
+    <div id="groups-tab" style="display:none;"><div id="group-list"></div></div>
+  </div>
+
+  <div id="chat-area">
+
+  <!-- WELCOME SCREEN (shown before any chat is selected) -->
+  <div id="welcome-screen">
+    <div id="welcome-content">
+      <div id="welcome-icon">💬</div>
+      <h2>priconkt</h2>
+      <p>Send and receive messages with end-to-end encryption.</p>
+      <p style="font-size:12px; color:#3b4a54; margin-top:8px;">🔒 Your personal messages are end-to-end encrypted</p>
+    </div>
+  </div>
+
+  <div id="chat-main" style="display:none; flex-direction:column; flex:1; height:100%;">
+    <div id="chat-header">
+      <div id="chat-header-info">
+        <span id="chat-with">Select a chat</span>
+        <span id="chat-sub" style="font-size:12px; color:#8696a0; display:block;"></span>
+      </div>
+      <button id="theme-btn" onclick="openThemePicker()" title="Chat Theme" style="background:none;border:none;color:#aebac1;font-size:18px;cursor:pointer;width:auto;height:auto;padding:4px;">🎨</button>
+      <button id="disappear-btn" onclick="openDisappearPicker()" title="Disappearing Messages" style="background:none;border:none;color:#aebac1;font-size:18px;cursor:pointer;width:auto;height:auto;padding:4px;">⏱️</button>
+      <select id="translate-lang" onchange="setTranslateLang(this.value)" title="Translate incoming messages to" style="background:#2a3942;color:#8696a0;border:none;border-radius:8px;padding:4px 6px;font-size:12px;cursor:pointer;max-width:80px;">
+  <option value="">🌐 Off</option>
+  <option value="en">English</option>
+  <option value="te">Telugu</option>
+  <option value="hi">Hindi</option>
+  <option value="ta">Tamil</option>
+  <option value="kn">Kannada</option>
+  <option value="ml">Malayalam</option>
+  <option value="fr">French</option>
+  <option value="es">Spanish</option>
+  <option value="ar">Arabic</option>
+  <option value="zh">Chinese</option>
+  <option value="ja">Japanese</option>
+  <option value="de">German</option>
+  <option value="pt">Portuguese</option>
+</select>
+      <button id="group-info-btn" onclick="openGroupInfo()" title="Group Info" style="background:none;border:none;color:#aebac1;font-size:18px;cursor:pointer;width:auto;height:auto;padding:4px;">⋮</button>
+      <div id="call-buttons" style="display:none;">
+        <button onclick="startCall('voice')" title="Voice Call">📞</button>
+        <button onclick="startCall('video')" title="Video Call">📹</button>
+      </div>
     </div>
 
     <div id="messages"></div>
 
+    <div id="attachment-panel" style="display:none;">
+      <label class="attach-opt">
+        <input type="file" accept="image/*" multiple onchange="sendMediaFiles(this,'image')" style="display:none">
+        🖼️ Gallery
+      </label>
+      <label class="attach-opt">
+        <input type="file" accept="image/*" capture="camera" onchange="sendMediaFiles(this,'image')" style="display:none">
+        📷 Camera
+      </label>
+      <label class="attach-opt">
+        <input type="file" accept="video/*" onchange="sendMediaFiles(this,'video')" style="display:none">
+        🎥 Video
+      </label>
+      <label class="attach-opt">
+        <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar" onchange="sendMediaFiles(this,'document')" style="display:none">
+        📄 Document
+      </label>
+      <div class="attach-opt" onclick="showContactForm()">👤 Contact</div>
+    </div>
+
+    <div id="reply-bar" style="display:none;">
+      <div id="reply-preview">
+        <span id="reply-sender-name"></span>
+        <span id="reply-text-preview"></span>
+      </div>
+      <button onclick="cancelReply()">✕</button>
+    </div>
     <div id="input-area">
-      <input type="text" id="message-input" placeholder="Type a message...">
-      <button onclick="sendMessage()">Send</button>
+  <button id="attach-btn" onclick="toggleAttachPanel()" title="Attach" style="background:none;border:none;color:#8696a0;font-size:22px;cursor:pointer;width:auto;height:auto;padding:4px 8px;">📎</button>
+  <input type="text" id="message-input" placeholder="Type a message...">
+  <button id="mic-btn"
+    onmousedown="startVoiceRecord()" onmouseup="stopVoiceRecord()"
+    ontouchstart="startVoiceRecord(event)" ontouchend="stopVoiceRecord(event)"
+    title="Hold to record voice message"
+    style="background:none;border:none;color:#8696a0;font-size:22px;cursor:pointer;width:auto;height:auto;padding:4px 8px;">🎙️</button>
+  <button onclick="sendMessage()">➤</button>
+</div>
+
+</div>
+
+<!-- DELETE MESSAGE MENU -->
+<div id="msg-context-menu">
+  <div onclick="replyToMessage()">↩️ Reply</div>
+  <div onclick="forwardMessage()">➡️ Forward</div>
+  <div id="ctx-download" onclick="downloadFile()" style="display:none;">⬇️ Download</div>
+  <div onclick="deleteForMe()">🗑️ Delete for me</div>
+  <div id="ctx-delete-everyone" onclick="deleteForEveryone()">🗑️ Delete for everyone</div>
+  <div onclick="closeDeleteMenu()">✕ Cancel</div>
+</div>
+
+<!-- REPLY BAR -->
+<div id="reply-bar" style="display:none;">
+  <div id="reply-preview">
+    <span id="reply-sender-name"></span>
+    <span id="reply-text-preview"></span>
+  </div>
+  <button onclick="cancelReply()">✕</button>
+</div>
+
+<!-- FORWARD DIALOG -->
+<div id="forward-overlay" onclick="closeForward()" style="display:none;"></div>
+<div id="forward-modal" style="display:none;">
+  <div id="forward-box">
+    <h3>Forward to</h3>
+    <div id="forward-user-list"></div>
+    <button onclick="closeForward()">Cancel</button>
+  </div>
+</div>
+
+<!-- CONTACT SEND FORM -->
+<div id="contact-send-overlay" style="display:none;" onclick="closeContactSend()"></div>
+<div id="contact-send-modal" style="display:none;">
+  <div id="contact-send-box">
+    <h3 style="color:#e9edef;margin-bottom:12px;">Send Contact</h3>
+    <input type="text" id="contact-name-input" placeholder="Contact name"
+      style="width:100%;padding:10px;background:#2a3942;color:#e9edef;border:none;border-radius:8px;margin-bottom:8px;font-size:14px;">
+    <input type="text" id="contact-phone-input" placeholder="Phone number"
+      style="width:100%;padding:10px;background:#2a3942;color:#e9edef;border:none;border-radius:8px;margin-bottom:12px;font-size:14px;">
+    <div style="display:flex;gap:8px;">
+      <button onclick="sendContact()" style="flex:1;padding:10px;background:#00a884;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;width:auto;height:auto;">Send</button>
+      <button onclick="closeContactSend()" style="flex:1;padding:10px;background:#2a3942;color:#e9edef;border:none;border-radius:8px;cursor:pointer;font-size:14px;width:auto;height:auto;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS PANEL -->
+<div id="status-panel">
+  <div id="status-panel-header">
+    <button onclick="closeStatusTab()">✕</button>
+    <span>Status</span>
+    <button onclick="openPostStatus()">+ Add</button>
+  </div>
+  <div id="status-panel-body">
+    <div id="my-status-section">
+      <p style="color:#8696a0;font-size:12px;padding:8px 16px;text-transform:uppercase;">My Status</p>
+      <div id="my-status-list"></div>
+    </div>
+    <div id="others-status-section">
+      <p style="color:#8696a0;font-size:12px;padding:8px 16px;text-transform:uppercase;">Recent Updates</p>
+      <div id="others-status-list"></div>
+    </div>
+  </div>
+</div>
+<div id="status-overlay" onclick="closeStatusTab()"></div>
+
+<!-- POST STATUS PANEL -->
+<div id="post-status-panel">
+  <div id="post-status-header">
+    <button onclick="closePostStatus()">✕</button>
+    <span>Post Status</span>
+  </div>
+  <div id="post-status-body">
+    <div id="status-preview-area">
+      <div id="status-preview-bg">
+        <p id="status-preview-text-show"></p>
+        <img id="status-preview-img" src="" alt="" style="display:none;max-width:100%;max-height:300px;border-radius:8px;">
+        <video id="status-preview-vid" controls style="display:none;max-width:100%;border-radius:8px;"></video>
+      </div>
+    </div>
+    <div class="profile-field" style="padding:0 16px;">
+      <textarea id="status-text-input" placeholder="Type a status..." maxlength="700" oninput="previewStatusText(this.value)" style="height:60px;"></textarea>
+    </div>
+    <div id="status-color-picker">
+      <span style="font-size:12px;color:#8696a0;">Background:</span>
+      <button onclick="setStatusBg('#111b21')" style="background:#111b21;"></button>
+      <button onclick="setStatusBg('#005c4b')" style="background:#005c4b;"></button>
+      <button onclick="setStatusBg('#1a237e')" style="background:#1a237e;"></button>
+      <button onclick="setStatusBg('#880e4f')" style="background:#880e4f;"></button>
+      <button onclick="setStatusBg('#e65100')" style="background:#e65100;"></button>
+    </div>
+    <label class="attach-opt" style="margin:0 16px;width:calc(100% - 32px);">
+      <input type="file" accept="image/*,video/*" onchange="previewStatusFile(this)" style="display:none">
+      📎 Add Photo / Video
+    </label>
+    <button id="post-status-submit" onclick="submitStatus()">Post Status</button>
+  </div>
+</div>
+<div id="post-status-overlay" onclick="closePostStatus()"></div>
+
+<!-- VIEW STATUS FULLSCREEN -->
+<div id="status-view-screen" style="display:none;">
+  <div id="status-progress-bar"><div id="status-progress-fill"></div></div>
+  <div id="status-view-header">
+    <button onclick="closeStatusView()">✕</button>
+    <span id="status-view-username"></span>
+    <span id="status-view-time"></span>
+  </div>
+  <div id="status-view-content">
+    <p id="status-view-text"></p>
+    <img id="status-view-img" src="" style="display:none;max-width:100%;max-height:70vh;border-radius:8px;">
+    <video id="status-view-vid" controls style="display:none;max-width:100%;max-height:70vh;border-radius:8px;"></video>
+  </div>
+</div>
+
+<!-- DISCOVER PANEL -->
+<div id="discover-panel">
+  <div id="discover-header">
+    <button onclick="closeDiscover()">✕</button>
+    <span>priconkt Discover</span>
+  </div>
+  <div id="discover-body">
+    <div id="discover-status-info">
+      <div id="visibility-status-display">
+        <span id="vis-icon">👁️</span>
+        <div>
+          <strong id="vis-label">You are Hidden</strong>
+          <p id="vis-desc">Turn on visibility so nearby users can discover you</p>
+        </div>
+        <button id="vis-toggle-btn" onclick="toggleVisibility()">Turn On</button>
+      </div>
+    </div>
+    <button id="scan-now-btn" onclick="scanNearby()">
+      📡 Scan Nearby
+    </button>
+    <div id="scan-status-msg"></div>
+    <div id="discover-results"></div>
+  </div>
+</div>
+<div id="discover-overlay" onclick="closeDiscover()"></div>
+
+<!-- PRIVACY CENTER PANEL -->
+<div id="privacy-panel">
+  <div id="privacy-header">
+    <button onclick="closePrivacyCenter()">✕</button>
+    <span>Privacy Center</span>
+    <button onclick="savePrivacySettings()">Save</button>
+  </div>
+  <div id="privacy-body">
+
+    <!-- GHOST MODE -->
+    <div class="privacy-section">
+      <div class="privacy-section-title">👻 Ghost Mode</div>
+      <div class="ghost-toggle-row">
+        <div>
+          <strong>Ghost Mode</strong>
+          <p>Invisible to everyone while staying connected</p>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="ghost-toggle" onchange="toggleGhostMode(this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="privacy-section">
+      <div class="privacy-section-title">💬 Messaging</div>
+      <div class="privacy-row">
+        <span>Who can message me</span>
+        <select id="priv-message" class="priv-select">
+          <option value="everyone">Everyone</option>
+          <option value="nobody">Nobody</option>
+        </select>
+      </div>
+      <div class="privacy-row">
+        <span>Who can call me</span>
+        <select id="priv-call" class="priv-select">
+          <option value="everyone">Everyone</option>
+          <option value="nobody">Nobody</option>
+        </select>
+      </div>
+      <div class="privacy-row">
+        <span>Who can add me to groups</span>
+        <select id="priv-groups" class="priv-select">
+          <option value="everyone">Everyone</option>
+          <option value="nobody">Nobody</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="privacy-section">
+      <div class="privacy-section-title">👁️ Visibility</div>
+      <div class="privacy-toggle-row">
+        <span>Show online status</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="priv-online" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="privacy-toggle-row">
+        <span>Show read receipts (blue dots)</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="priv-read" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="privacy-toggle-row">
+        <span>Allow nearby discovery</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="priv-nearby" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="privacy-toggle-row">
+        <span>Allow forwarding my messages</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="priv-forward" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="privacy-section">
+      <div class="privacy-section-title">⚠️ Danger Zone</div>
+      <button onclick="deleteAccount()" style="background:#e53935;color:white;border:none;padding:12px 16px;border-radius:8px;cursor:pointer;font-size:14px;width:100%;margin-top:8px;">🗑️ Delete My Account</button>
     </div>
 
   </div>
+</div>
+<div id="privacy-overlay" onclick="closePrivacyCenter()"></div>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script>
-const socket = io();
-let myName = '';
-function joinChat() {
-  const nameInput = document.getElementById('name-input');
-  const name = nameInput.value.trim();
-  if (name === '') return;
-  myName = name;
-  document.getElementById('name-popup').style.display = 'none';
-  setTimeout(() => { document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight; }, 200);
-}
+<!-- DISAPPEARING MESSAGE PICKER -->
+<div id="disappear-picker" style="display:none;">
+  <div id="disappear-box">
+    <h3>Disappearing Messages</h3>
+    <p style="color:#8696a0;font-size:13px;">Message auto-deletes after:</p>
+    <div id="disappear-options">
+      <button onclick="setDisappearTimer(0)">Off</button>
+      <button onclick="setDisappearTimer(10)">10 sec</button>
+      <button onclick="setDisappearTimer(60)">1 min</button>
+      <button onclick="setDisappearTimer(3600)">1 hour</button>
+      <button onclick="setDisappearTimer(86400)">1 day</button>
+    </div>
+    <button onclick="closeDisappearPicker()" style="margin-top:12px;background:#2a3942;color:#8696a0;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;width:auto;height:auto;">Cancel</button>
+  </div>
+</div>
+<div id="disappear-overlay" onclick="closeDisappearPicker()" style="display:none;"></div>
 
-function sendMessage() {
-  const input = document.getElementById('message-input');
-  const text = input.value.trim();
-  if (text === '') return;
-  socket.emit('send_message', {
-    sender: myName,
-    text: text,
-    time: new Date().toLocaleTimeString()
-  });
-  input.value = '';
-}
+<!-- CHAT THEME PICKER -->
+<div id="theme-picker" style="display:none;">
+  <div id="theme-box">
+    <h3 style="color:#e9edef;margin-bottom:12px;">Chat Theme</h3>
+    <div id="theme-grid">
+      <div class="theme-opt" data-theme="default" onclick="applyChatTheme('default')">
+        <div class="theme-preview" style="background:linear-gradient(#0b141a,#111b21);"></div>
+        <span>Default</span>
+      </div>
+      <div class="theme-opt" data-theme="ocean" onclick="applyChatTheme('ocean')">
+        <div class="theme-preview" style="background:linear-gradient(#0d47a1,#006064);"></div>
+        <span>🌊 Ocean</span>
+      </div>
+      <div class="theme-opt" data-theme="galaxy" onclick="applyChatTheme('galaxy')">
+        <div class="theme-preview" style="background:linear-gradient(#1a0533,#0d0d2b);"></div>
+        <span>🌌 Galaxy</span>
+      </div>
+      <div class="theme-opt" data-theme="cricket" onclick="applyChatTheme('cricket')">
+        <div class="theme-preview" style="background:linear-gradient(#1b5e20,#33691e);"></div>
+        <span>🏏 Cricket</span>
+      </div>
+      <div class="theme-opt" data-theme="gaming" onclick="applyChatTheme('gaming')">
+        <div class="theme-preview" style="background:linear-gradient(#0a0a1a,#1a0a2e);"></div>
+        <span>🎮 Gaming</span>
+      </div>
+      <div class="theme-opt" data-theme="couple" onclick="applyChatTheme('couple')">
+        <div class="theme-preview" style="background:linear-gradient(#880e4f,#4a0066);"></div>
+        <span>❤️ Couple</span>
+      </div>
+      <div class="theme-opt" data-theme="study" onclick="applyChatTheme('study')">
+        <div class="theme-preview" style="background:linear-gradient(#1565c0,#0277bd);"></div>
+        <span>📚 Study</span>
+      </div>
+      <div class="theme-opt" data-theme="work" onclick="applyChatTheme('work')">
+        <div class="theme-preview" style="background:linear-gradient(#212121,#37474f);"></div>
+        <span>💼 Work</span>
+      </div>
+      <div class="theme-opt" data-theme="sunset" onclick="applyChatTheme('sunset')">
+        <div class="theme-preview" style="background:linear-gradient(#e65100,#bf360c);"></div>
+        <span>🌅 Sunset</span>
+      </div>
+    </div>
+    <button onclick="closeThemePicker()" style="margin-top:12px;background:#2a3942;color:#8696a0;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;width:auto;height:auto;">Close</button>
+  </div>
+</div>
+<div id="theme-overlay" onclick="closeThemePicker()" style="display:none;"></div>
 
-socket.on('message_history', (messages) => {
-  messages.forEach((data) => {
-    const messages2 = document.getElementById('messages');
-    const bubble = document.createElement('div');
-    bubble.className = 'message-bubble';
-    bubble.innerHTML = '<span class="sender">' + data.sender + '</span><span class="text">' + data.text + '</span><span class="time">' + data.time + '</span>';
-    messages2.appendChild(bubble);
-  });
-});
-socket.on('receive_message', (data) => {
-  const messages = document.getElementById('messages');
-  const bubble = document.createElement('div');
-  bubble.className = 'message-bubble';
-  bubble.innerHTML = '<span class="sender">' + data.sender + '</span><span class="text">' + data.text + '</span><span class="time">' + data.time + '</span>';
-  messages.appendChild(bubble);
-  messages.scrollTop = messages.scrollHeight;
-});
+<!-- SEARCH / NEW CHAT PANEL -->
+<div id="search-panel">
+  <div id="search-header">
+    <button onclick="closeSearch()">✕</button>
+    <span>New Chat</span>
+  </div>
+  <div id="search-body">
+    <input type="text" id="search-input" placeholder="Search by username..."
+      oninput="searchUsers(this.value)">
+    <div id="search-results"></div>
+  </div>
+</div>
+<div id="search-overlay" onclick="closeSearch()"></div>
 
-document.getElementById('message-input').addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') sendMessage();
-});
-</script>
+<!-- EDIT MY PROFILE PANEL -->
+<div id="my-profile-panel">
+  <div id="my-profile-header">
+    <button onclick="closeMyProfile()">✕</button>
+    <span>Edit Profile</span>
+    <button id="save-profile-btn" onclick="saveMyProfile()">Save</button>
+  </div>
+  <div id="my-profile-body">
+    <div id="my-profile-avatar-wrap">
+      <img id="my-profile-big-avatar" src="" alt="" style="display:none">
+      <span id="my-profile-big-initial"></span>
+      <input type="file" id="my-profile-pic-input" accept="image/*"
+        style="display:none" onchange="uploadProfilePic(this)">
+      <div id="my-profile-overlay"
+        onclick="document.getElementById('my-profile-pic-input').click()">📷</div>
+    </div>
+    <p id="my-profile-username" style="color:#e9edef;font-size:18px;font-weight:bold;"></p>
+    <div class="profile-field">
+      <label>Bio</label>
+      <textarea id="my-bio-input" placeholder="Write something about yourself..." maxlength="150"></textarea>
+      <span id="bio-char-count">0/150</span>
+    </div>
+  </div>
+</div>
+<div id="my-profile-overlay-bg" onclick="closeMyProfile()"></div>
 
+<!-- CONTACT INFO PANEL -->
+<div id="contact-info-panel">
+  <div id="contact-info-header">
+    <button onclick="closeContactInfo()">✕</button>
+    <span>Contact Info</span>
+  </div>
+  <div id="contact-info-body">
+    <div id="contact-big-avatar-wrap">
+      <img id="contact-big-avatar" src="" alt="" style="display:none">
+      <span id="contact-big-initial"></span>
+    </div>
+    <h2 id="contact-info-name"></h2>
+    <p id="contact-info-about" style="color:#8696a0;font-size:14px;text-align:center;padding:0 20px;font-style:italic;"></p>
+    <div id="contact-action-btns">
+      <button id="block-btn" onclick="toggleBlock()">🚫 Block</button>
+    </div>
+  </div>
+</div>
+<div id="contact-info-overlay" onclick="closeContactInfo()"></div>
+
+<!-- GROUP INFO PANEL -->
+<div id="group-info-panel">
+  <div id="group-info-header">
+    <button onclick="closeGroupInfo()">✕</button>
+    <span>Group Info</span>
+  </div>
+  <div id="group-info-body">
+    <div id="group-big-avatar-wrap">
+      <img id="group-big-avatar" src="" alt="" style="display:none">
+      <span id="group-big-initial">👥</span>
+      <input type="file" id="group-pic-upload" accept="image/*"
+        style="display:none" onchange="uploadGroupPic(this)">
+      <div id="group-avatar-overlay"
+        onclick="document.getElementById('group-pic-upload').click()">📷</div>
+    </div>
+    <h2 id="group-info-name"></h2>
+    <p id="group-info-count" style="color:#8696a0;font-size:14px;"></p>
+    <div id="group-action-btns">
+      <button onclick="showAddMember()">➕ Add Member</button>
+      <button onclick="clearChat()" style="background:#f0a500!important;">🗑️ Clear Chat</button>
+      <button id="exit-group-btn" onclick="exitGroup()">🚪 Exit Group</button>
+    </div>
+    <div id="add-member-box" style="display:none;">
+      <select id="add-member-select"></select>
+      <button onclick="confirmAddMember()">Add</button>
+    </div>
+    <div id="group-members-list"></div>
+  </div>
+</div>
+<div id="group-info-overlay" onclick="closeGroupInfo()"></div>
+
+<!-- CALL SCREENS -->
+<div id="incoming-call" style="display:none;">
+  <div id="incoming-call-box">
+    <p id="caller-name"></p>
+    <p id="call-type-label"></p>
+    <button onclick="answerCall()">✅ Answer</button>
+    <button onclick="rejectCall()">❌ Reject</button>
+  </div>
+</div>
+
+<div id="call-screen" style="display:none;">
+  <div id="call-box">
+    <p id="call-with-name"></p>
+    <div id="videos">
+      <video id="remote-video" autoplay playsinline></video>
+      <video id="local-video" autoplay playsinline muted></video>
+    </div>
+    <div id="call-controls">
+      <button onclick="toggleMute()" id="mute-btn">🎙️ Mute</button>
+      <button onclick="endCall()">📵 End</button>
+      <button onclick="toggleCamera()" id="cam-btn">📷 Camera</button>
+    </div>
+  </div>
+</div>
+
+<div id="group-call-screen" style="display:none;">
+  <div id="group-call-box">
+    <p id="group-call-title"></p>
+    <div id="group-videos"></div>
+    <div id="call-controls">
+      <button onclick="toggleGroupMute()" id="group-mute-btn">🎙️ Mute</button>
+      <button onclick="leaveGroupCall()">📵 Leave</button>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="js/chat.js"></script>
+<script src="js/call.js"></script>
 </body>
 </html>
