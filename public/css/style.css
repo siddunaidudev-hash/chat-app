@@ -962,3 +962,76 @@ input:checked + .toggle-slider:before { transform: translateX(20px); }
 #post-status-overlay {
   display: none;
 }
+
+/* FULL SCREEN PANELS ON MOBILE */
+@media (max-width: 768px) {
+  #search-panel {
+    width: 100% !important;
+    left: -100% !important;
+  }
+  #search-panel.open {
+    left: 0 !important;
+  }
+  #privacy-panel {
+    width: 100% !important;
+    right: -100% !important;
+  }
+  #privacy-panel.open {
+    right: 0 !important;
+  }
+  #contact-info-panel {
+    width: 100% !important;
+    right: -100% !important;
+  }
+  #contact-info-panel.open {
+    right: 0 !important;
+  }
+  #group-info-panel {
+    width: 100% !important;
+    right: -100% !important;
+  }
+  #group-info-panel.open {
+    right: 0 !important;
+  }
+  #my-profile-panel {
+    width: 100% !important;
+    right: -100% !important;
+  }
+  #my-profile-panel.open {
+    right: 0 !important;
+  }
+  #status-panel {
+    width: 100% !important;
+    left: -100% !important;
+  }
+  #status-panel.open {
+    left: 0 !important;
+  }
+  #discover-panel {
+    width: 100% !important;
+    left: -100% !important;
+  }
+  #discover-panel.open {
+    left: 0 !important;
+  }
+  #post-status-panel {
+    width: 100% !important;
+  }
+
+  /* Hide overlays on mobile — panels cover full screen */
+  #search-overlay,
+  #privacy-overlay,
+  #contact-info-overlay,
+  #group-info-overlay,
+  #my-profile-overlay-bg,
+  #discover-overlay {
+    display: none !important;
+  }
+
+  /* Sidebar buttons smaller on mobile */
+  #sidebar-top button {
+    width: 30px !important;
+    height: 30px !important;
+    font-size: 14px !important;
+  }
+}
