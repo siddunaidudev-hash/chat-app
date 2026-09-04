@@ -455,8 +455,22 @@
     <span>New Chat</span>
   </div>
   <div id="search-body">
-    <input type="text" id="search-input" placeholder="Search by username..."
-      oninput="searchUsers(this.value)">
+    <div style="display:flex;gap:8px;padding:10px 12px;">
+      <input type="text" id="search-input" placeholder="Search by username..."
+        oninput="searchUsers(this.value)"
+        style="flex:1;padding:10px 14px;background:#2a3942;color:#e9edef;border:none;border-radius:24px;font-size:14px;outline:none;">
+      <button onclick="openCreateGroupFromSearch()" title="Create Group"
+        style="background:#00a884;color:white;border:none;border-radius:50%;width:42px;height:42px;font-size:22px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;">+</button>
+    </div>
+    <div id="create-group-inline" style="display:none;padding:0 12px 10px;">
+      <p style="color:#8696a0;font-size:12px;margin-bottom:8px;">Group Name</p>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="group-name-inline" placeholder="Enter group name..."
+          style="flex:1;padding:10px;background:#2a3942;color:#e9edef;border:none;border-radius:8px;font-size:14px;outline:none;">
+        <button onclick="createGroupFromSearch()"
+          style="background:#00a884;color:white;border:none;border-radius:8px;padding:10px 14px;cursor:pointer;font-size:14px;width:auto;height:auto;">Create</button>
+      </div>
+    </div>
     <div id="search-results"></div>
   </div>
 </div>

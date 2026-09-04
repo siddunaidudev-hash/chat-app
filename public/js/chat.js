@@ -2347,3 +2347,33 @@ function applyMobileOpen() {
     document.getElementById('chat-area').classList.add('mobile-open');
   }
 }
+
+// ============ CREATE GROUP FROM SEARCH ============
+function openCreateGroupFromSearch() {
+  const box = document.getElementById('create-group-inline');
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
+  if (box.style.display === 'block') {
+    document.getElementById('group-name-inline').focus();
+    document.getElementById('search-results').innerHTML = '';
+    document.getElementById('search-input').value = '';
+  }
+}
+
+async function createGroupFromSearch() {
+  const name = document.getElementById('group-name-inline').value.trim();
+  if (!name) return alert('Enter a group name');
+  const allUsers = await fetch('/api/users').then(r => r.json());
+  const members = allUsers.map(u => u.username);
+  if (!members.includes(currentUser)) members.push(currentUser);
+  const res = await fetch('/api/groups/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, members, createdBy: currentUser })
+  });
+  const data = await res.json();
+  document.getElementById('group-name-inline').value = '';
+  document.getElementById('create-group-inline').style.display = 'none';
+  closeSearch();
+  loadGroups();
+  alert('Group "' + name + '" created!');
+}
