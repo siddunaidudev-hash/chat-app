@@ -1,4 +1,20 @@
 const socket = io();
+
+// AUTO LOGIN CHECK
+window.addEventListener('load', () => {
+  const savedToken = localStorage.getItem('token');
+  const savedUsername = localStorage.getItem('username');
+  if (savedToken && savedUsername) {
+    currentUser = savedUsername;
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app-screen').style.display = 'flex';
+    document.getElementById('my-username').textContent = '🔐 ' + currentUser;
+    socket.emit('set_username', currentUser);
+    generateKeys().then(() => {
+      loadUsers(); loadGroups(); loadMyProfilePic(); loadBlockedUsers(); initVisibility(); initPrivacy();
+    });
+  }
+});
 let currentUser = null;
 let activeChat = null;
 let activeChatType = null;
@@ -477,6 +493,7 @@ async function openPrivateChat(username) {
      <button onclick="startCall('video')" title="Video Call">📹</button>`;
   document.getElementById('messages').innerHTML = '';
   socket.emit('mark_read', { chatPartner: username });
+  applyMobileOpen();
   const msgs = await fetch(`/api/messages/${currentUser}/${username}`).then(r => r.json());
   for (const m of msgs) {
     if (m.deletedForEveryone) {
@@ -514,6 +531,7 @@ async function openGroupChat(groupId, groupName, members, groupPic) {
   document.getElementById('messages').innerHTML = '';
   loadChatTheme(`group_${groupId}`);
   socket.emit('join_group', groupId);
+  applyMobileOpen();
   const msgs = await fetch(`/api/groups/messages/${groupId}`).then(r => r.json());
   msgs.forEach(m => showMessage(m.sender, m.text,
     new Date(m.createdAt).toLocaleTimeString(), null, false,
@@ -2298,5 +2316,34 @@ async function deleteAccount() {
     }
   } catch (err) {
     alert('❌ Failed to delete account. Try again.');
+  }
+}
+
+// ============ LOGOUT ============
+function logout() {
+  const confirm1 = confirm('Are you sure you want to logout?');
+  if (!confirm1) return;
+  localStorage.removeItem('token');
+  localStorage.removeItem('username');
+  currentUser = null;
+  socket.emit('set_username', null);
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('app-screen').style.display = 'none';
+  document.getElementById('auth-username').value = '';
+  document.getElementById('auth-password').value = '';
+}
+
+// ============ MOBILE NAVIGATION ============
+function goBackToChats() {
+  document.getElementById('sidebar').classList.remove('mobile-hidden');
+  document.getElementById('chat-area').classList.remove('mobile-open');
+  activeChat = null;
+  activeChatType = null;
+}
+
+function applyMobileOpen() {
+  if (window.innerWidth <= 768) {
+    document.getElementById('sidebar').classList.add('mobile-hidden');
+    document.getElementById('chat-area').classList.add('mobile-open');
   }
 }

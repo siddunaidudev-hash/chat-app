@@ -860,3 +860,38 @@ input:checked + .toggle-slider:before { transform: translateX(20px); }
 .translated-text { color: #8696a0; font-size: 12px; font-style: italic; margin-top: 2px; border-top: 1px dashed rgba(0,168,132,0.3); padding-top: 4px; }
 #mic-btn:active { color: #e53935 !important; transform: scale(1.2); }
 #translate-lang option { background: #202c33; color: #e9edef; }
+
+/* MOBILE RESPONSIVE */
+#back-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: #aebac1;
+  font-size: 24px;
+  cursor: pointer;
+  width: auto;
+  height: auto;
+  padding: 4px 8px;
+}
+
+@media (max-width: 768px) {
+  #app-screen { position: relative; overflow: hidden; }
+  #sidebar {
+    width: 100% !important;
+    position: absolute;
+    height: 100vh;
+    z-index: 5;
+    transition: transform 0.25s ease;
+  }
+  #sidebar.mobile-hidden { transform: translateX(-100%); }
+  #chat-area {
+    position: absolute;
+    width: 100% !important;
+    height: 100vh;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    z-index: 6;
+  }
+  #chat-area.mobile-open { transform: translateX(0); }
+  #back-btn { display: flex !important; }
+}

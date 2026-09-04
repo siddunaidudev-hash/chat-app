@@ -81,7 +81,8 @@
 
   <div id="chat-main" style="display:none; flex-direction:column; flex:1; height:100%;">
     <div id="chat-header">
-      <div id="chat-header-info">
+      <button id="back-btn" onclick="goBackToChats()">←</button>
+<div id="chat-header-info">
         <span id="chat-with">Select a chat</span>
         <span id="chat-sub" style="font-size:12px; color:#8696a0; display:block;"></span>
       </div>
@@ -375,7 +376,8 @@
 
     <div class="privacy-section">
       <div class="privacy-section-title">⚠️ Danger Zone</div>
-      <button onclick="deleteAccount()" style="background:#e53935;color:white;border:none;padding:12px 16px;border-radius:8px;cursor:pointer;font-size:14px;width:100%;margin-top:8px;">🗑️ Delete My Account</button>
+      <button onclick="logout()" style="background:#2a3942;color:#e9edef;border:none;padding:12px 16px;border-radius:8px;cursor:pointer;font-size:14px;width:100%;margin-top:8px;">🚪 Logout</button>
+<button onclick="deleteAccount()" style="background:#e53935;color:white;border:none;padding:12px 16px;border-radius:8px;cursor:pointer;font-size:14px;width:100%;margin-top:8px;">🗑️ Delete My Account</button>
     </div>
 
   </div>
