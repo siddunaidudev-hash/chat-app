@@ -1391,6 +1391,10 @@ function openSearch() {
 function closeSearch() {
   document.getElementById('search-panel').classList.remove('open');
   document.getElementById('search-overlay').classList.remove('open');
+  if (window.innerWidth <= 768) {
+    document.getElementById('sidebar').classList.remove('mobile-hidden');
+    document.getElementById('chat-area').classList.remove('mobile-open');
+  }
 }
 
 async function searchUsers(query) {
@@ -1701,6 +1705,9 @@ function openDiscover() {
 function closeDiscover() {
   document.getElementById('discover-panel').classList.remove('open');
   document.getElementById('discover-overlay').classList.remove('open');
+  if (window.innerWidth <= 768) {
+    document.getElementById('sidebar').classList.remove('mobile-hidden');
+  }
 }
 
 async function scanNearby() {
@@ -1810,6 +1817,9 @@ async function openPrivacyCenter() {
 }
 
 function closePrivacyCenter() {
+  if (window.innerWidth <= 768) {
+    document.getElementById('sidebar').classList.remove('mobile-hidden');
+  }
   document.getElementById('privacy-panel').classList.remove('open');
   document.getElementById('privacy-overlay').classList.remove('open');
 }
@@ -2020,6 +2030,9 @@ function openDiscover() {
 function closeDiscover() {
   document.getElementById('discover-panel').classList.remove('open');
   document.getElementById('discover-overlay').classList.remove('open');
+  if (window.innerWidth <= 768) {
+    document.getElementById('sidebar').classList.remove('mobile-hidden');
+  }
 }
 
 async function scanNearby() {
