@@ -1310,6 +1310,7 @@ function closeContactInfo() {
 
 // ============ MY PROFILE ============
 async function openMyProfile() {
+  closeAllPanels();
   const res = await fetch(`/api/users/bio/${currentUser}`);
   const data = await res.json();
   document.getElementById('my-bio-input').value = data.bio || '';
@@ -1380,6 +1381,7 @@ async function getUserAvatar(username) {
 
 // ============ SEARCH ============
 function openSearch() {
+  closeAllPanels();
   document.getElementById('search-panel').classList.add('open');
   document.getElementById('search-overlay').classList.add('open');
   document.getElementById('search-input').value = '';
@@ -1440,6 +1442,7 @@ let statusTimer = null;
 let currentStatusIdx = 0;
 
 function openStatusTab() {
+  closeAllPanels();
   document.getElementById('status-panel').classList.add('open');
   document.getElementById('status-overlay').classList.add('open');
   loadStatuses();
@@ -1695,6 +1698,7 @@ async function toggleVisibility() {
 }
 
 function openDiscover() {
+  closeAllPanels();
   document.getElementById('discover-panel').classList.add('open');
   document.getElementById('discover-overlay').classList.add('open');
   updateVisibilityUI();
@@ -1793,6 +1797,7 @@ async function toggleGhostMode(enabled) {
 }
 
 async function openPrivacyCenter() {
+  closeAllPanels();
   await initPrivacy();
   const gt = document.getElementById('ghost-toggle');
   if (gt) gt.checked = ghostMode;
@@ -1817,9 +1822,6 @@ async function openPrivacyCenter() {
 }
 
 function closePrivacyCenter() {
-  if (window.innerWidth <= 768) {
-    document.getElementById('sidebar').classList.remove('mobile-hidden');
-  }
   document.getElementById('privacy-panel').classList.remove('open');
   document.getElementById('privacy-overlay').classList.remove('open');
 }
@@ -2020,6 +2022,7 @@ function pickVisibilityDuration() {
 }
 
 function openDiscover() {
+  closeAllPanels();
   document.getElementById('discover-panel').classList.add('open');
   document.getElementById('discover-overlay').classList.add('open');
   updateVisibilityUI();
@@ -2354,6 +2357,7 @@ function goBackToChats() {
   closeDiscover();
   closeStatusTab();
   closePrivacyCenter();
+  closeAllPanels();
   document.getElementById('sidebar').classList.remove('mobile-hidden');
   document.getElementById('chat-area').classList.remove('mobile-open');
   activeChat = null;
@@ -2395,4 +2399,30 @@ async function createGroupFromSearch() {
   closeSearch();
   loadGroups();
   alert('Group "' + name + '" created!');
+}
+
+// ============ CLOSE ALL PANELS ============
+function closeAllPanels() {
+  const panels = [
+    'search-panel', 'privacy-panel', 'status-panel',
+    'post-status-panel', 'discover-panel', 'my-profile-panel',
+    'contact-info-panel', 'group-info-panel'
+  ];
+  panels.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('open');
+  });
+  const overlays = [
+    'search-overlay', 'privacy-overlay', 'status-overlay',
+    'discover-overlay', 'my-profile-overlay-bg',
+    'contact-info-overlay', 'group-info-overlay',
+    'post-status-overlay'
+  ];
+  overlays.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('open');
+  });
+  if (window.innerWidth <= 768) {
+    document.getElementById('sidebar').classList.remove('mobile-hidden');
+  }
 }
