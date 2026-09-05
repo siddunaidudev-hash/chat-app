@@ -1047,3 +1047,17 @@ input:checked + .toggle-slider:before { transform: translateX(20px); }
     display: flex !important;
   }
 }
+
+/* HIDE ALL PANELS ON MOBILE WHEN NOT OPEN */
+@media (max-width: 768px) {
+  #discover-panel:not(.open),
+  #search-panel:not(.open),
+  #status-panel:not(.open),
+  #privacy-panel:not(.open),
+  #contact-info-panel:not(.open),
+  #group-info-panel:not(.open),
+  #my-profile-panel:not(.open),
+  #post-status-panel:not(.open) {
+    display: none !important;
+  }
+}

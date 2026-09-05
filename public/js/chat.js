@@ -2,6 +2,8 @@ const socket = io();
 
 // AUTO LOGIN CHECK
 window.addEventListener('load', () => {
+  // Close all panels first
+  document.querySelectorAll('#discover-panel, #search-panel, #status-panel, #privacy-panel').forEach(p => p.classList.remove('open'));
   const savedToken = localStorage.getItem('token');
   const savedUsername = localStorage.getItem('username');
   if (savedToken && savedUsername) {
