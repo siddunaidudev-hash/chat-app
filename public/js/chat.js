@@ -2403,6 +2403,18 @@ async function createGroupFromSearch() {
 
 // ============ CLOSE ALL PANELS ============
 function closeAllPanels() {
+  ['search-panel','privacy-panel','status-panel','post-status-panel',
+   'discover-panel','my-profile-panel','contact-info-panel','group-info-panel']
+  .forEach(id => { const el = document.getElementById(id); if (el) el.classList.remove('open'); });
+  ['search-overlay','privacy-overlay','status-overlay','post-status-overlay',
+   'discover-overlay','my-profile-overlay-bg','contact-info-overlay','group-info-overlay']
+  .forEach(id => { const el = document.getElementById(id); if (el) el.classList.remove('open'); });
+  if (window.innerWidth <= 768) {
+    document.getElementById('sidebar').classList.remove('mobile-hidden');
+  }
+}
+// ============ CLOSE ALL PANELS OLD ============
+function closeAllPanelsOLD() {
   const panels = [
     'search-panel', 'privacy-panel', 'status-panel',
     'post-status-panel', 'discover-panel', 'my-profile-panel',
