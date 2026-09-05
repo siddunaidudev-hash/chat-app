@@ -2335,6 +2335,10 @@ function logout() {
 
 // ============ MOBILE NAVIGATION ============
 function goBackToChats() {
+  closeSearch();
+  closeDiscover();
+  closeStatusTab();
+  closePrivacyCenter();
   document.getElementById('sidebar').classList.remove('mobile-hidden');
   document.getElementById('chat-area').classList.remove('mobile-open');
   activeChat = null;
