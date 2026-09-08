@@ -2,8 +2,7 @@ const socket = io();
 
 // AUTO LOGIN CHECK
 window.addEventListener('load', () => {
-  // Close all panels first
-  document.querySelectorAll('#discover-panel, #search-panel, #status-panel, #privacy-panel').forEach(p => p.classList.remove('open'));
+  closeAllPanels();
   const savedToken = localStorage.getItem('token');
   const savedUsername = localStorage.getItem('username');
   if (savedToken && savedUsername) {
@@ -17,6 +16,7 @@ window.addEventListener('load', () => {
     });
   }
 });
+
 let currentUser = null;
 let activeChat = null;
 let activeChatType = null;
@@ -24,10 +24,7 @@ let activeGroupId = null;
 let activeGroupName = null;
 let myPrivateKey = null;
 let keysReadyResolve;
-const keysReady = new Promise(resolve => { 
-  keysReadyResolve = resolve; 
-});
-
+const keysReady = new Promise(resolve => { keysReadyResolve = resolve; });
 const sharedKeys = {};
 let deleteTarget = { msgId: null, bubble: null, fileUrl: null, fileType: null, isMine: false };
 let currentFilter = 'all';
@@ -36,6 +33,19 @@ let blockedUsers = [];
 let viewingContactUsername = null;
 let replyingTo = null;
 let forwardingData = null;
+let translateTo = '';
+let disappearSeconds = 0;
+let isVisible = false;
+let myLocation = null;
+let statusBgColor = '#111b21';
+let statusFileUrl = null;
+let statusFileType = null;
+let currentStatusList = [];
+let statusTimer = null;
+let currentStatusIdx = 0;
+let privacySettings = {};
+let ghostMode = false;
+let currentChatTheme = 'default';
 
 const urlParams = new URLSearchParams(window.location.search);
 const googleToken = urlParams.get('token');
@@ -49,156 +59,48 @@ if (googleToken && googleUsername) {
   document.getElementById('my-username').textContent = '🔐 ' + currentUser;
   socket.emit('set_username', currentUser);
   generateKeys().then(() => {
-  loadUsers(); loadGroups(); loadMyProfilePic(); loadBlockedUsers(); initVisibility(); initPrivacy();
-});
+    loadUsers(); loadGroups(); loadMyProfilePic(); loadBlockedUsers(); initVisibility(); initPrivacy();
+  });
   window.history.replaceState({}, document.title, '/');
 }
 
 // ============ ENCRYPTION ============
 async function generateKeys() {
-
-  // CASE 1: Private key already exists in this browser
   const storedPrivKey = localStorage.getItem('privKey_' + currentUser);
-
   if (storedPrivKey) {
-
     const privKeyData = JSON.parse(storedPrivKey);
-
-    myPrivateKey = await crypto.subtle.importKey(
-      'jwk',
-      privKeyData,
-      { name: 'ECDH', namedCurve: 'P-256' },
-      false,
-      ['deriveKey']
-    );
-
-    // Tell the app that keys are ready
-    if (keysReadyResolve) {
-      keysReadyResolve();
-      keysReadyResolve = null;
-    }
-
+    myPrivateKey = await crypto.subtle.importKey('jwk', privKeyData, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey']);
+    if (keysReadyResolve) { keysReadyResolve(); keysReadyResolve = null; }
     return;
   }
-
-
-  // CASE 2: Try to get private key from server
   try {
-
-    const serverRes = await fetch(
-      `/api/users/privkey/${currentUser}`
-    );
-
+    const serverRes = await fetch(`/api/users/privkey/${currentUser}`);
     const serverData = await serverRes.json();
-
     if (serverData.privKey) {
-
       const privKeyData = JSON.parse(serverData.privKey);
-
-      myPrivateKey = await crypto.subtle.importKey(
-        'jwk',
-        privKeyData,
-        { name: 'ECDH', namedCurve: 'P-256' },
-        false,
-        ['deriveKey']
-      );
-
-      localStorage.setItem(
-        'privKey_' + currentUser,
-        serverData.privKey
-      );
-
-      // Tell the app that keys are ready
-      if (keysReadyResolve) {
-        keysReadyResolve();
-        keysReadyResolve = null;
-      }
-
+      myPrivateKey = await crypto.subtle.importKey('jwk', privKeyData, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey']);
+      localStorage.setItem('privKey_' + currentUser, serverData.privKey);
+      if (keysReadyResolve) { keysReadyResolve(); keysReadyResolve = null; }
       return;
     }
+  } catch (e) { console.error('Could not load private key:', e); }
 
-  } catch (e) {
-    console.error('Could not load private key:', e);
-  }
-
-
-  // CASE 3: No key exists, so create new keys
-  const pair = await crypto.subtle.generateKey(
-    {
-      name: 'ECDH',
-      namedCurve: 'P-256'
-    },
-    true,
-    ['deriveKey']
-  );
-
+  const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey']);
   myPrivateKey = pair.privateKey;
-
-
-  // Save private key
-  const privKeyExport = await crypto.subtle.exportKey(
-    'jwk',
-    pair.privateKey
-  );
-
+  const privKeyExport = await crypto.subtle.exportKey('jwk', pair.privateKey);
   const privKeyStr = JSON.stringify(privKeyExport);
-
-  localStorage.setItem(
-    'privKey_' + currentUser,
-    privKeyStr
-  );
-
-
-  // Save private key on server
-  await fetch(
-    `/api/users/privkey/${currentUser}`,
-    {
-      method: 'POST',
-
-      headers: {
-        'Content-Type': 'application/json'
-      },
-
-      body: JSON.stringify({
-        privKey: privKeyStr
-      })
-    }
-  );
-
-
-  // Export public key
-  const pub = await crypto.subtle.exportKey(
-    'spki',
-    pair.publicKey
-  );
-
-  const pubBase64 = btoa(
-    String.fromCharCode(...new Uint8Array(pub))
-  );
-
-
-  // Save public key on server
-  await fetch(
-    `/api/users/key/${currentUser}`,
-    {
-      method: 'POST',
-
-      headers: {
-        'Content-Type': 'application/json'
-      },
-
-      body: JSON.stringify({
-        publicKey: pubBase64
-      })
-    }
-  );
-
-
-  // IMPORTANT: Tell the app that keys are ready
-  if (keysReadyResolve) {
-    keysReadyResolve();
-    keysReadyResolve = null;
-  }
+  localStorage.setItem('privKey_' + currentUser, privKeyStr);
+  await fetch(`/api/users/privkey/${currentUser}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ privKey: privKeyStr })
+  });
+  const pub = await crypto.subtle.exportKey('spki', pair.publicKey);
+  const pubBase64 = btoa(String.fromCharCode(...new Uint8Array(pub)));
+  await fetch(`/api/users/key/${currentUser}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ publicKey: pubBase64 })
+  });
+  if (keysReadyResolve) { keysReadyResolve(); keysReadyResolve = null; }
 }
 
 async function getSharedKey(username) {
@@ -207,14 +109,10 @@ async function getSharedKey(username) {
   if (!res.ok) return null;
   const { publicKey } = await res.json();
   const keyData = Uint8Array.from(atob(publicKey), c => c.charCodeAt(0));
-  const theirKey = await crypto.subtle.importKey(
-    'spki', keyData, { name: 'ECDH', namedCurve: 'P-256' }, false, []
-  );
+  const theirKey = await crypto.subtle.importKey('spki', keyData, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
   const shared = await crypto.subtle.deriveKey(
-    { name: 'ECDH', public: theirKey },
-    myPrivateKey,
-    { name: 'AES-GCM', length: 256 },
-    false, ['encrypt', 'decrypt']
+    { name: 'ECDH', public: theirKey }, myPrivateKey,
+    { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
   );
   sharedKeys[username] = shared;
   return shared;
@@ -225,12 +123,9 @@ async function encrypt(text, username) {
   const key = await getSharedKey(username);
   if (!key) return text;
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const enc = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv }, key, new TextEncoder().encode(text)
-  );
+  const enc = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(text));
   const combined = new Uint8Array(12 + enc.byteLength);
-  combined.set(iv);
-  combined.set(new Uint8Array(enc), 12);
+  combined.set(iv); combined.set(new Uint8Array(enc), 12);
   return btoa(String.fromCharCode(...combined));
 }
 
@@ -240,47 +135,32 @@ async function decrypt(data, username) {
     const key = await getSharedKey(username);
     if (!key) return data;
     const bytes = Uint8Array.from(atob(data), c => c.charCodeAt(0));
-    const dec = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: bytes.slice(0, 12) }, key, bytes.slice(12)
-    );
+    const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.slice(0, 12) }, key, bytes.slice(12));
     return new TextDecoder().decode(dec);
   } catch { return '[old message]'; }
 }
 
-// ============ AUTH ============
-
-// ============ SOCKET EVENTS ============
-socket.on('receive_private', async ({ sender, text, time, msgId, fileUrl, fileType, fileName, replyTo, disappearsAt }) => {
-  await keysReady;
-  if (activeChatType === 'private' && sender === activeChat) {
-    const decrypted = text ? await decrypt(text, sender) : '';
-    showMessage(sender, decrypted, time, msgId, false, fileUrl, fileType, fileName, replyTo, disappearsAt, 'delivered');
-    socket.emit('mark_read', { chatPartner: sender });
-    if (disappearsAt) {
-      const msLeft = new Date(disappearsAt) - Date.now();
-      if (msLeft > 0) {
-        setTimeout(() => {
-          const el = document.querySelector(`[data-msg-id="${msgId}"]`);
-          if (el) {
-            el.style.transition = 'opacity 0.5s';
-            el.style.opacity = '0';
-            setTimeout(() => el.remove(), 500);
-          }
-        }, msLeft);
-      }
+// ============ TRANSLATION ============
+async function translateText(text, targetLang) {
+  if (!text || !targetLang) return null;
+  try {
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=auto|${targetLang}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.responseStatus === 200 && data.responseData && data.responseData.translatedText) {
+      return data.responseData.translatedText;
     }
-  } else {
-    markUnread(sender);
-  }
-});
+  } catch (e) {}
+  return null;
+}
 
+// ============ AUTH ============
 async function register() {
   const username = document.getElementById('auth-username').value.trim();
   const password = document.getElementById('auth-password').value.trim();
   if (!username || !password) return showMsg('Fill both fields');
   const res = await fetch('/api/auth/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password })
   });
   const data = await res.json();
@@ -292,8 +172,7 @@ async function login() {
   const password = document.getElementById('auth-password').value.trim();
   if (!username || !password) return showMsg('Fill both fields');
   const res = await fetch('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password })
   });
   const data = await res.json();
@@ -305,18 +184,16 @@ async function login() {
     document.getElementById('app-screen').style.display = 'flex';
     document.getElementById('my-username').textContent = '🔐 ' + currentUser;
     loadChatTheme(`user_${username}`);
-disappearSeconds = 0;
-const dBtn = document.getElementById('disappear-btn');
-if (dBtn) { dBtn.style.color = '#aebac1'; dBtn.title = 'Disappearing Messages'; }
+    disappearSeconds = 0;
+    const dBtn = document.getElementById('disappear-btn');
+    if (dBtn) { dBtn.style.color = '#aebac1'; dBtn.title = 'Disappearing Messages'; }
     socket.emit('set_username', currentUser);
     await generateKeys();
-loadUsers(); loadGroups(); loadMyProfilePic(); loadBlockedUsers(); initVisibility(); initPrivacy();
+    loadUsers(); loadGroups(); loadMyProfilePic(); loadBlockedUsers(); initVisibility(); initPrivacy();
   } else { showMsg(data.message); }
 }
 
-function showMsg(msg) {
-  document.getElementById('auth-message').textContent = msg;
-}
+function showMsg(msg) { document.getElementById('auth-message').textContent = msg; }
 
 // ============ FILTER TABS ============
 function showTab(tab) {
@@ -376,14 +253,12 @@ async function createGroup() {
   const members = allUsers.map(u => u.username);
   if (!members.includes(currentUser)) members.push(currentUser);
   await fetch('/api/groups/create', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, members, createdBy: currentUser })
   });
   document.getElementById('group-name-input').value = '';
   document.getElementById('create-group-box').style.display = 'none';
-  loadGroups();
-  showTab('groups');
+  loadGroups(); showTab('groups');
 }
 
 // ============ LOAD USERS / GROUPS ============
@@ -463,12 +338,8 @@ async function loadGroups() {
     div.innerHTML = `
       ${avatarHtml}
       <div class="chat-list-info">
-        <div class="chat-list-row1">
-          <span class="chat-list-name">${g.name}</span>
-        </div>
-        <div class="chat-list-row2">
-          <span class="chat-list-last">${g.members.length} members</span>
-        </div>
+        <div class="chat-list-row1"><span class="chat-list-name">${g.name}</span></div>
+        <div class="chat-list-row2"><span class="chat-list-last">${g.members.length} members</span></div>
       </div>
     `;
     div.onclick = () => openGroupChat(g._id, g.name, g.members, g.groupPic);
@@ -478,6 +349,7 @@ async function loadGroups() {
 
 // ============ OPEN CHATS ============
 async function openPrivateChat(username) {
+  closeAllPanels();
   document.getElementById('welcome-screen').style.display = 'none';
   document.getElementById('chat-main').style.display = 'flex';
   clearUnread(username);
@@ -500,8 +372,7 @@ async function openPrivateChat(username) {
   for (const m of msgs) {
     if (m.deletedForEveryone) {
       showMessage(m.sender, '🚫 This message was deleted',
-        new Date(m.createdAt).toLocaleTimeString(), m._id, true,
-        null, null, null, null, null, m.status);
+        new Date(m.createdAt).toLocaleTimeString(), m._id, true, null, null, null, null, null, m.status);
       continue;
     }
     if (m.deletedFor && m.deletedFor.includes(currentUser)) continue;
@@ -513,6 +384,7 @@ async function openPrivateChat(username) {
 }
 
 async function openGroupChat(groupId, groupName, members, groupPic) {
+  closeAllPanels();
   document.getElementById('welcome-screen').style.display = 'none';
   document.getElementById('chat-main').style.display = 'flex';
   activeGroupId = groupId;
@@ -520,9 +392,7 @@ async function openGroupChat(groupId, groupName, members, groupPic) {
   activeChatType = 'group';
   activeChat = null;
   cancelReply();
-  const memberList = members
-    ? members.filter(m => m !== currentUser).join(', ') + ', You'
-    : '';
+  const memberList = members ? members.filter(m => m !== currentUser).join(', ') + ', You' : '';
   document.getElementById('chat-with').textContent = '👥 ' + groupName;
   document.getElementById('chat-sub').textContent = memberList;
   document.getElementById('group-info-btn').style.display = 'block';
@@ -544,39 +414,25 @@ async function openGroupChat(groupId, groupName, members, groupPic) {
 async function sendMessage() {
   const input = document.getElementById('message-input');
   const text = input.value.trim();
-  if (!text && !replyingTo) return;
   if (!text) return;
-  const replyPayload = replyingTo ? {
-    text: replyingTo.text,
-    sender: replyingTo.sender,
-    fileType: replyingTo.fileType
-  } : null;
+  const replyPayload = replyingTo ? { text: replyingTo.text, sender: replyingTo.sender, fileType: replyingTo.fileType } : null;
   if (activeChatType === 'private' && activeChat) {
     const encrypted = await encrypt(text, activeChat);
     const tId = 'temp_' + Date.now();
     showMessage(currentUser, text, new Date().toLocaleTimeString(), tId, false, null, null, null, replyPayload, null, 'sent');
     if (disappearSeconds > 0) {
       setTimeout(() => {
-        const el = document.querySelector(`[data-msg-id="${tId}"]`) ||
-          document.querySelector(`[data-msg-id^="temp_"]:last-child`);
-        if (el) {
-          el.style.transition = 'opacity 0.5s';
-          el.style.opacity = '0';
-          setTimeout(() => el.remove(), 500);
-        }
+        const el = document.querySelector(`[data-msg-id="${tId}"]`);
+        if (el) { el.style.transition = 'opacity 0.5s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 500); }
       }, disappearSeconds * 1000);
     }
     socket.emit('private_message', {
-      receiver: activeChat,
-      text: encrypted,
-      replyTo: replyPayload,
+      receiver: activeChat, text: encrypted, replyTo: replyPayload,
       disappearSeconds: disappearSeconds > 0 ? disappearSeconds : null
     });
-      
   } else if (activeChatType === 'group' && activeGroupId) {
     socket.emit('group_message', {
-      groupId: activeGroupId, text,
-      replyTo: replyPayload,
+      groupId: activeGroupId, text, replyTo: replyPayload,
       disappearSeconds: disappearSeconds > 0 ? disappearSeconds : null
     });
   }
@@ -602,19 +458,11 @@ async function sendMediaFiles(input, type) {
       const data = await res.json();
       if (data.fileUrl) {
         const tempId = 'temp_' + Date.now();
-        showMessage(currentUser, '', new Date().toLocaleTimeString(),
-          tempId, false, data.fileUrl, data.fileType, data.fileName,
-          null, null, 'sent');
+        showMessage(currentUser, '', new Date().toLocaleTimeString(), tempId, false, data.fileUrl, data.fileType, data.fileName, null, null, 'sent');
         if (activeChatType === 'private' && activeChat) {
-          socket.emit('private_message', {
-            receiver: activeChat, text: '',
-            fileUrl: data.fileUrl, fileType: data.fileType, fileName: data.fileName
-          });
+          socket.emit('private_message', { receiver: activeChat, text: '', fileUrl: data.fileUrl, fileType: data.fileType, fileName: data.fileName });
         } else if (activeChatType === 'group' && activeGroupId) {
-          socket.emit('group_message', {
-            groupId: activeGroupId, text: '',
-            fileUrl: data.fileUrl, fileType: data.fileType, fileName: data.fileName
-          });
+          socket.emit('group_message', { groupId: activeGroupId, text: '', fileUrl: data.fileUrl, fileType: data.fileType, fileName: data.fileName });
         }
       }
     } catch (err) { console.error('Upload failed:', err); }
@@ -641,49 +489,31 @@ async function sendContact() {
   const contactJson = JSON.stringify({ name, phone });
   closeContactSend();
   const tempId = 'temp_' + Date.now();
-  showMessage(currentUser, '', new Date().toLocaleTimeString(),
-    tempId, false, contactJson, 'contact', name, null, null, 'sent');
+  showMessage(currentUser, '', new Date().toLocaleTimeString(), tempId, false, contactJson, 'contact', name, null, null, 'sent');
   if (activeChatType === 'private' && activeChat) {
-    socket.emit('private_message', {
-      receiver: activeChat, text: '',
-      fileUrl: contactJson, fileType: 'contact', fileName: name
-    });
+    socket.emit('private_message', { receiver: activeChat, text: '', fileUrl: contactJson, fileType: 'contact', fileName: name });
   } else if (activeChatType === 'group' && activeGroupId) {
-    socket.emit('group_message', {
-      groupId: activeGroupId, text: '',
-      fileUrl: contactJson, fileType: 'contact', fileName: name
-    });
+    socket.emit('group_message', { groupId: activeGroupId, text: '', fileUrl: contactJson, fileType: 'contact', fileName: name });
   }
 }
 
 // ============ RENDER FILE ============
 function renderFileContent(fileUrl, fileType, fileName) {
   if (!fileUrl) return '';
-  if (fileType === 'image') {
-    return `<img src="${fileUrl}" style="max-width:220px;max-height:220px;border-radius:8px;cursor:pointer;display:block;margin-top:4px;" onclick="window.open('${fileUrl}','_blank')">`;
-  }
-  if (fileType === 'video') {
-    return `<video controls style="max-width:220px;border-radius:8px;display:block;margin-top:4px;"><source src="${fileUrl}">Video not supported.</video>`;
-  }
+  if (fileType === 'image') return `<img src="${fileUrl}" style="max-width:220px;max-height:220px;border-radius:8px;cursor:pointer;display:block;margin-top:4px;" onclick="window.open('${fileUrl}','_blank')">`;
+  if (fileType === 'video') return `<video controls style="max-width:220px;border-radius:8px;display:block;margin-top:4px;"><source src="${fileUrl}">Video not supported.</video>`;
   if (fileType === 'audio' || fileType === 'voice') {
-  const transcript = fileName && fileName !== 'Voice message' ? fileName : '';
-  return `<div class="voice-bubble">
-    <button class="voice-play-btn" onclick="playVoice(this,'${fileUrl}')">▶</button>
-    <div class="voice-wave">
-      <div class="voice-bar"></div><div class="voice-bar"></div>
-      <div class="voice-bar"></div><div class="voice-bar"></div>
-      <div class="voice-bar"></div><div class="voice-bar"></div>
-    </div>
-    <span class="voice-duration">🎙️</span>
-  </div>${transcript ? `<div class="voice-transcript">📝 ${transcript}</div>` : ''}`;
-}
+    const transcript = fileName && fileName !== 'Voice message' ? fileName : '';
+    return `<div class="voice-bubble">
+      <button class="voice-play-btn" onclick="playVoice(this,'${fileUrl}')">▶</button>
+      <div class="voice-wave"><div class="voice-bar"></div><div class="voice-bar"></div><div class="voice-bar"></div><div class="voice-bar"></div><div class="voice-bar"></div><div class="voice-bar"></div></div>
+      <span class="voice-duration">🎙️</span>
+    </div>${transcript ? `<div class="voice-transcript">📝 ${transcript}</div>` : ''}`;
+  }
   if (fileType === 'contact') {
     try {
       const c = JSON.parse(fileUrl);
-      return `<div style="background:rgba(0,168,132,0.15);padding:10px;border-radius:8px;margin-top:4px;border-left:3px solid #00a884;">
-        <div style="font-weight:bold;color:#e9edef;">👤 ${c.name}</div>
-        <div style="font-size:12px;color:#8696a0;">${c.phone}</div>
-      </div>`;
+      return `<div style="background:rgba(0,168,132,0.15);padding:10px;border-radius:8px;margin-top:4px;border-left:3px solid #00a884;"><div style="font-weight:bold;color:#e9edef;">👤 ${c.name}</div><div style="font-size:12px;color:#8696a0;">${c.phone}</div></div>`;
     } catch { return ''; }
   }
   return `<a href="${fileUrl}" download="${fileName || 'file'}" target="_blank" style="color:#00a884;display:flex;align-items:center;gap:6px;margin-top:4px;text-decoration:none;">📄 <span>${fileName || 'Download'}</span></a>`;
@@ -696,10 +526,7 @@ function renderReplyPreview(replyTo) {
     : replyTo.fileType === 'document' ? '📄 Document'
     : replyTo.fileType === 'contact' ? '👤 Contact'
     : (replyTo.text || '').substring(0, 60);
-  return `<div class="reply-in-bubble">
-    <span class="reply-in-sender">${replyTo.sender || ''}</span>
-    <span class="reply-in-text">${preview}</span>
-  </div>`;
+  return `<div class="reply-in-bubble"><span class="reply-in-sender">${replyTo.sender || ''}</span><span class="reply-in-text">${preview}</span></div>`;
 }
 
 function getDotsHtml(status, isMine) {
@@ -728,29 +555,12 @@ function showMessage(sender, text, time, msgId = null, isDeleted = false,
   const replyHtml = renderReplyPreview(replyTo);
   const dotsHtml = getDotsHtml(status, isMine);
   const fwdHtml = forwardedFrom ? `<span class="fwd-label">➡️ Forwarded</span>` : '';
-  const textHtml = text
-    ? `<span class="text"${isDeleted ? ' style="font-style:italic;color:#8696a0"' : ''}>${text}</span>`
-    : '';
-  bubble.innerHTML = `
-    ${fwdHtml}
-    ${replyHtml}
-    <span class="sender">${sender}</span>
-    ${textHtml}
-    ${fileHtml}
-    <span class="time">${time}${dotsHtml}</span>
-  `;
+  const textHtml = text ? `<span class="text"${isDeleted ? ' style="font-style:italic;color:#8696a0"' : ''}>${text}</span>` : '';
+  bubble.innerHTML = `${fwdHtml}${replyHtml}<span class="sender">${sender}</span>${textHtml}${fileHtml}<span class="time">${time}${dotsHtml}</span>`;
   if (!isDeleted) {
-    bubble.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      showContextMenu(e.clientX, e.clientY, bubble);
-    });
+    bubble.addEventListener('contextmenu', (e) => { e.preventDefault(); showContextMenu(e.clientX, e.clientY, bubble); });
     let pressTimer;
-    bubble.addEventListener('touchstart', () => {
-      pressTimer = setTimeout(() => {
-        const rect = bubble.getBoundingClientRect();
-        showContextMenu(rect.left, rect.top, bubble);
-      }, 700);
-    });
+    bubble.addEventListener('touchstart', () => { pressTimer = setTimeout(() => { const rect = bubble.getBoundingClientRect(); showContextMenu(rect.left, rect.top, bubble); }, 700); });
     bubble.addEventListener('touchend', () => clearTimeout(pressTimer));
     bubble.addEventListener('touchmove', () => clearTimeout(pressTimer));
   }
@@ -764,21 +574,16 @@ function showContextMenu(x, y, bubble) {
   const msgId = bubble.dataset.msgId;
   const fileUrl = bubble.dataset.fileUrl;
   const fileType = bubble.dataset.fileType;
-  const text = bubble.dataset.msgText;
-  const sender = bubble.dataset.msgSender;
   deleteTarget = { msgId, bubble, fileUrl, fileType, isMine };
   const menu = document.getElementById('msg-context-menu');
   document.getElementById('ctx-delete-everyone').style.display = isMine ? 'block' : 'none';
-  document.getElementById('ctx-download').style.display =
-    (fileUrl && fileType !== 'contact') ? 'block' : 'none';
+  document.getElementById('ctx-download').style.display = (fileUrl && fileType !== 'contact') ? 'block' : 'none';
   menu.style.display = 'flex';
   menu.style.left = Math.min(x, window.innerWidth - 210) + 'px';
   menu.style.top = Math.min(y, window.innerHeight - 220) + 'px';
 }
 
-function closeDeleteMenu() {
-  document.getElementById('msg-context-menu').style.display = 'none';
-}
+function closeDeleteMenu() { document.getElementById('msg-context-menu').style.display = 'none'; }
 
 // ============ REPLY ============
 function replyToMessage() {
@@ -790,10 +595,7 @@ function replyToMessage() {
   replyingTo = { text, sender, fileType };
   document.getElementById('reply-sender-name').textContent = sender;
   document.getElementById('reply-text-preview').textContent =
-    fileType === 'image' ? '📷 Photo'
-    : fileType === 'video' ? '🎥 Video'
-    : fileType === 'document' ? '📄 Document'
-    : text.substring(0, 60);
+    fileType === 'image' ? '📷 Photo' : fileType === 'video' ? '🎥 Video' : fileType === 'document' ? '📄 Document' : text.substring(0, 60);
   document.getElementById('reply-bar').style.display = 'flex';
   document.getElementById('message-input').focus();
   closeDeleteMenu();
@@ -809,11 +611,7 @@ function cancelReply() {
 async function forwardMessage() {
   const { bubble } = deleteTarget;
   if (!bubble) return closeDeleteMenu();
-  forwardingData = {
-    text: bubble.dataset.msgText,
-    fileUrl: bubble.dataset.fileUrl,
-    fileType: bubble.dataset.fileType
-  };
+  forwardingData = { text: bubble.dataset.msgText, fileUrl: bubble.dataset.fileUrl, fileType: bubble.dataset.fileType };
   closeDeleteMenu();
   const users = await fetch('/api/users').then(r => r.json());
   const groups = await fetch(`/api/groups/my/${currentUser}`).then(r => r.json());
@@ -821,16 +619,14 @@ async function forwardMessage() {
   fwdList.innerHTML = '';
   users.filter(u => u.username !== currentUser).forEach(u => {
     const div = document.createElement('div');
-    div.className = 'search-result-item';
-    div.style.cursor = 'pointer';
+    div.className = 'search-result-item'; div.style.cursor = 'pointer';
     div.innerHTML = `<span class="chat-list-initial">${u.username[0].toUpperCase()}</span> <span style="color:#e9edef;">${u.username}</span>`;
     div.onclick = () => confirmForward('user', u.username);
     fwdList.appendChild(div);
   });
   groups.forEach(g => {
     const div = document.createElement('div');
-    div.className = 'search-result-item';
-    div.style.cursor = 'pointer';
+    div.className = 'search-result-item'; div.style.cursor = 'pointer';
     div.innerHTML = `<span class="chat-list-initial">👥</span> <span style="color:#e9edef;">${g.name}</span>`;
     div.onclick = () => confirmForward('group', g._id);
     fwdList.appendChild(div);
@@ -843,25 +639,11 @@ async function confirmForward(type, target) {
   if (!forwardingData) return;
   closeForward();
   if (type === 'user') {
-    socket.emit('private_message', {
-      receiver: target,
-      text: forwardingData.text || '',
-      fileUrl: forwardingData.fileUrl || null,
-      fileType: forwardingData.fileType || null,
-      forwardedFrom: currentUser
-    });
-    showMessage(currentUser, forwardingData.text || '',
-      new Date().toLocaleTimeString(), 'temp_fwd_' + Date.now(),
-      false, forwardingData.fileUrl, forwardingData.fileType,
-      null, null, currentUser, 'sent');
+    socket.emit('private_message', { receiver: target, text: forwardingData.text || '', fileUrl: forwardingData.fileUrl || null, fileType: forwardingData.fileType || null, forwardedFrom: currentUser });
+    showMessage(currentUser, forwardingData.text || '', new Date().toLocaleTimeString(), 'temp_fwd_' + Date.now(), false, forwardingData.fileUrl, forwardingData.fileType, null, null, currentUser, 'sent');
     if (activeChat !== target) alert('Message forwarded to ' + target);
   } else {
-    socket.emit('group_message', {
-      groupId: target,
-      text: forwardingData.text || '',
-      fileUrl: forwardingData.fileUrl || null,
-      fileType: forwardingData.fileType || null
-    });
+    socket.emit('group_message', { groupId: target, text: forwardingData.text || '', fileUrl: forwardingData.fileUrl || null, fileType: forwardingData.fileType || null });
   }
   forwardingData = null;
 }
@@ -876,11 +658,7 @@ function closeForward() {
 function downloadFile() {
   const { fileUrl } = deleteTarget;
   if (!fileUrl) return closeDeleteMenu();
-  const a = document.createElement('a');
-  a.href = fileUrl;
-  a.download = fileUrl.split('/').pop();
-  a.target = '_blank';
-  a.click();
+  const a = document.createElement('a'); a.href = fileUrl; a.download = fileUrl.split('/').pop(); a.target = '_blank'; a.click();
   closeDeleteMenu();
 }
 
@@ -888,8 +666,7 @@ function downloadFile() {
 async function deleteForMe() {
   if (!deleteTarget.msgId) return;
   await fetch(`/api/messages/${deleteTarget.msgId}`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'DELETE', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username: currentUser, deleteType: 'me' })
   });
   if (deleteTarget.bubble) deleteTarget.bubble.remove();
@@ -900,19 +677,14 @@ async function deleteForEveryone() {
   if (!deleteTarget.msgId) return;
   try {
     const res = await fetch(`/api/messages/${deleteTarget.msgId}`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: currentUser, deleteType: 'everyone' })
     });
     const data = await res.json();
     if (!res.ok || !data.success) return;
     if (deleteTarget.bubble) {
       const textSpan = deleteTarget.bubble.querySelector('.text');
-      if (textSpan) {
-        textSpan.textContent = '🚫 This message was deleted';
-        textSpan.style.fontStyle = 'italic';
-        textSpan.style.color = '#8696a0';
-      }
+      if (textSpan) { textSpan.textContent = '🚫 This message was deleted'; textSpan.style.fontStyle = 'italic'; textSpan.style.color = '#8696a0'; }
       deleteTarget.bubble.dataset.deleted = 'true';
     }
     closeDeleteMenu();
@@ -965,161 +737,41 @@ socket.on('messages_read', ({ messageIds }) => {
   });
 });
 
-// ============ SOCKET EVENTS ============
-
-// ============ SOCKET EVENTS ============
-
-socket.on('receive_private', async ({
-  sender,
-  text,
-  time,
-  msgId,
-  fileUrl,
-  fileType,
-  fileName,
-  replyTo,
-  disappearsAt
-}) => {
-
-  // Wait until encryption keys are ready
+socket.on('receive_private', async ({ sender, text, time, msgId, fileUrl, fileType, fileName, replyTo, disappearsAt }) => {
   await keysReady;
-
-
   if (activeChatType === 'private' && sender === activeChat) {
-
-    // Decrypt message
-    const decrypted = text
-      ? await decrypt(text, sender)
-      : '';
-
-
-    // Show message
-    showMessage(
-      sender,
-      decrypted,
-      time,
-      msgId,
-      false,
-      fileUrl,
-      fileType,
-      fileName,
-      replyTo,
-      disappearsAt,
-      'delivered'
-    );
-
-
-    // Mark message as read
-    socket.emit('mark_read', {
-      chatPartner: sender
-    });
-
-
-    // Handle disappearing messages
+    const decrypted = text ? await decrypt(text, sender) : '';
+    showMessage(sender, decrypted, time, msgId, false, fileUrl, fileType, fileName, replyTo, disappearsAt, 'delivered');
+    socket.emit('mark_read', { chatPartner: sender });
     if (disappearsAt) {
-
-      const msLeft =
-        new Date(disappearsAt) - Date.now();
-
+      const msLeft = new Date(disappearsAt) - Date.now();
       if (msLeft > 0) {
-
         setTimeout(() => {
-
-          const el = document.querySelector(
-            `[data-msg-id="${msgId}"]`
-          );
-
-          if (el) {
-
-            el.style.transition =
-              'opacity 0.5s';
-
-            el.style.opacity = '0';
-
-            setTimeout(() => {
-              el.remove();
-            }, 500);
-
-          }
-
+          const el = document.querySelector(`[data-msg-id="${msgId}"]`);
+          if (el) { el.style.transition = 'opacity 0.5s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 500); }
         }, msLeft);
-
       }
-
     }
-
-
-    // Auto translate
-    if (
-      translateTo &&
-      decrypted &&
-      fileType !== 'voice'
-    ) {
-
+    if (translateTo && decrypted && fileType !== 'voice') {
       setTimeout(async () => {
-
-        const translated =
-          await translateText(
-            decrypted,
-            translateTo
-          );
-
-        if (
-          translated &&
-          translated !== decrypted
-        ) {
-
+        const translated = await translateText(decrypted, translateTo);
+        if (translated && translated !== decrypted) {
           const bubble = msgId
-            ? document.querySelector(
-                `[data-msg-id="${msgId}"]`
-              )
-            : document.querySelector(
-                '.message-bubble.received:last-child'
-              );
-
-          if (
-            bubble &&
-            !bubble.querySelector(
-              '.translated-text'
-            )
-          ) {
-
-            const transDiv =
-              document.createElement('div');
-
-            transDiv.className =
-              'translated-text';
-
-            transDiv.textContent =
-              '🌐 ' + translated;
-
-            const timeSpan =
-              bubble.querySelector('.time');
-
-            if (timeSpan) {
-
-              bubble.insertBefore(
-                transDiv,
-                timeSpan
-              );
-
-            }
-
+            ? document.querySelector(`[data-msg-id="${msgId}"]`)
+            : document.querySelector('.message-bubble.received:last-child');
+          if (bubble && !bubble.querySelector('.translated-text')) {
+            const transDiv = document.createElement('div');
+            transDiv.className = 'translated-text';
+            transDiv.textContent = '🌐 ' + translated;
+            const timeSpan = bubble.querySelector('.time');
+            if (timeSpan) bubble.insertBefore(transDiv, timeSpan);
           }
-
         }
-
       }, 200);
-
     }
-
   } else {
-
-    // Chat is not currently open
     markUnread(sender);
-
   }
-
 });
 
 socket.on('receive_group_message', ({ sender, text, time, fileUrl, fileType, fileName, replyTo }) => {
@@ -1132,19 +784,13 @@ socket.on('message_deleted_everyone', ({ messageId }) => {
   const bubble = document.querySelector(`[data-msg-id="${messageId}"]`);
   if (!bubble) return;
   const textSpan = bubble.querySelector('.text');
-  if (textSpan) {
-    textSpan.textContent = '🚫 This message was deleted';
-    textSpan.style.fontStyle = 'italic';
-    textSpan.style.color = '#8696a0';
-  }
+  if (textSpan) { textSpan.textContent = '🚫 This message was deleted'; textSpan.style.fontStyle = 'italic'; textSpan.style.color = '#8696a0'; }
   bubble.dataset.deleted = 'true';
   bubble.oncontextmenu = null;
   bubble.querySelectorAll('img, video, audio, a').forEach(el => el.remove());
 });
 
-socket.on('message_blocked', () => {
-  alert('Cannot send message — you are blocked by this user.');
-});
+socket.on('message_blocked', () => { alert('Cannot send message — you are blocked by this user.'); });
 
 // ============ BLOCK / UNBLOCK ============
 async function loadBlockedUsers() {
@@ -1159,25 +805,16 @@ async function toggleBlock() {
   if (!viewingContactUsername) return;
   const isBlocked = blockedUsers.includes(viewingContactUsername);
   if (isBlocked) {
-    await fetch('/api/users/block', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: currentUser, blockUsername: viewingContactUsername })
-    });
+    await fetch('/api/users/block', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: currentUser, blockUsername: viewingContactUsername }) });
     blockedUsers = blockedUsers.filter(u => u !== viewingContactUsername);
     document.getElementById('block-btn').textContent = '🚫 Block';
   } else {
-    await fetch('/api/users/block', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: currentUser, blockUsername: viewingContactUsername })
-    });
+    await fetch('/api/users/block', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: currentUser, blockUsername: viewingContactUsername }) });
     blockedUsers.push(viewingContactUsername);
     document.getElementById('block-btn').textContent = '✅ Unblock';
   }
   alert(isBlocked ? viewingContactUsername + ' unblocked.' : viewingContactUsername + ' blocked.');
-  closeContactInfo();
-  loadUsers();
+  closeContactInfo(); loadUsers();
 }
 
 // ============ GROUP INFO ============
@@ -1188,11 +825,8 @@ async function openGroupInfo() {
   document.getElementById('group-info-count').textContent = group.members.length + ' members';
   const bigImg = document.getElementById('group-big-avatar');
   const bigInitial = document.getElementById('group-big-initial');
-  if (group.groupPic) {
-    bigImg.src = group.groupPic; bigImg.style.display = 'block'; bigInitial.style.display = 'none';
-  } else {
-    bigImg.style.display = 'none'; bigInitial.style.display = 'flex';
-  }
+  if (group.groupPic) { bigImg.src = group.groupPic; bigImg.style.display = 'block'; bigInitial.style.display = 'none'; }
+  else { bigImg.style.display = 'none'; bigInitial.style.display = 'flex'; }
   document.getElementById('group-pic-upload').dataset.groupId = group._id;
   const membersList = document.getElementById('group-members-list');
   membersList.innerHTML = '<p style="color:#8696a0;font-size:13px;padding:8px 16px;">Members</p>';
@@ -1208,9 +842,7 @@ async function openGroupInfo() {
   const allUsers = await fetch('/api/users').then(r => r.json());
   const nonMembers = allUsers.filter(u => !group.members.includes(u.username));
   const sel = document.getElementById('add-member-select');
-  sel.innerHTML = nonMembers.length
-    ? nonMembers.map(u => `<option value="${u.username}">${u.username}</option>`).join('')
-    : '<option value="">No users to add</option>';
+  sel.innerHTML = nonMembers.length ? nonMembers.map(u => `<option value="${u.username}">${u.username}</option>`).join('') : '<option value="">No users to add</option>';
   document.getElementById('add-member-box').style.display = 'none';
   document.getElementById('group-info-panel').classList.add('open');
   document.getElementById('group-info-overlay').classList.add('open');
@@ -1230,24 +862,14 @@ async function confirmAddMember() {
   const sel = document.getElementById('add-member-select');
   const username = sel.value;
   if (!username || !activeGroupId) return;
-  await fetch(`/api/groups/${activeGroupId}/addmember`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username })
-  });
-  alert(username + ' added!');
-  closeGroupInfo();
-  loadGroups();
+  await fetch(`/api/groups/${activeGroupId}/addmember`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username }) });
+  alert(username + ' added!'); closeGroupInfo(); loadGroups();
 }
 
 async function exitGroup() {
   if (!activeGroupId) return;
   if (!window.confirm('Exit this group?')) return;
-  await fetch(`/api/groups/${activeGroupId}/exit`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: currentUser })
-  });
+  await fetch(`/api/groups/${activeGroupId}/exit`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: currentUser }) });
   closeGroupInfo();
   activeGroupId = null; activeChatType = null;
   document.getElementById('chat-with').textContent = 'Select a chat';
@@ -1261,8 +883,7 @@ async function uploadGroupPic(input) {
   const file = input.files[0];
   const groupId = input.dataset.groupId || activeGroupId;
   if (!file || !groupId) return;
-  const formData = new FormData();
-  formData.append('groupPic', file);
+  const formData = new FormData(); formData.append('groupPic', file);
   const res = await fetch(`/api/groups/${groupId}/pic`, { method: 'POST', body: formData });
   const data = await res.json();
   if (data.groupPic) {
@@ -1276,11 +897,7 @@ async function uploadGroupPic(input) {
 async function clearChat() {
   if (!activeChat || activeChatType !== 'private') return;
   if (!window.confirm('Clear all messages?')) return;
-  await fetch(`/api/clearchat/${currentUser}/${activeChat}`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: currentUser })
-  });
+  await fetch(`/api/clearchat/${currentUser}/${activeChat}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: currentUser }) });
   document.getElementById('messages').innerHTML = '';
 }
 
@@ -1332,13 +949,8 @@ function closeMyProfile() {
 
 async function saveMyProfile() {
   const bio = document.getElementById('my-bio-input').value.trim();
-  await fetch(`/api/users/bio/${currentUser}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ bio })
-  });
-  closeMyProfile();
-  alert('Profile saved!');
+  await fetch(`/api/users/bio/${currentUser}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bio }) });
+  closeMyProfile(); alert('Profile saved!');
 }
 
 document.getElementById('my-bio-input')?.addEventListener('input', function() {
@@ -1358,15 +970,12 @@ async function loadMyProfilePic() {
 async function uploadProfilePic(input) {
   const file = input.files[0];
   if (!file) return;
-  const formData = new FormData();
-  formData.append('profilePic', file);
-  formData.append('username', currentUser);
+  const formData = new FormData(); formData.append('profilePic', file); formData.append('username', currentUser);
   const res = await fetch('/api/upload', { method: 'POST', body: formData });
   const data = await res.json();
   if (data.profilePic) {
     const img = document.getElementById('my-avatar');
-    img.src = data.profilePic + '?t=' + Date.now();
-    img.style.display = 'block';
+    img.src = data.profilePic + '?t=' + Date.now(); img.style.display = 'block';
     document.getElementById('my-avatar-initial').style.display = 'none';
   }
 }
@@ -1385,8 +994,7 @@ function openSearch() {
   document.getElementById('search-panel').classList.add('open');
   document.getElementById('search-overlay').classList.add('open');
   document.getElementById('search-input').value = '';
-  document.getElementById('search-results').innerHTML =
-    '<p style="color:#8696a0;text-align:center;padding:20px;font-size:13px;">Type a username to search</p>';
+  document.getElementById('search-results').innerHTML = '<p style="color:#8696a0;text-align:center;padding:20px;font-size:13px;">Type a username to search</p>';
   setTimeout(() => document.getElementById('search-input').focus(), 300);
 }
 
@@ -1406,21 +1014,13 @@ async function searchUsers(query) {
     return;
   }
   const users = await fetch('/api/users').then(r => r.json());
-  const filtered = users.filter(u =>
-    u.username !== currentUser &&
-    u.username.toLowerCase().includes(query.toLowerCase())
-  );
+  const filtered = users.filter(u => u.username !== currentUser && u.username.toLowerCase().includes(query.toLowerCase()));
   results.innerHTML = '';
-  if (filtered.length === 0) {
-    results.innerHTML = '<p style="color:#8696a0;text-align:center;padding:20px;font-size:13px;">No user found</p>';
-    return;
-  }
+  if (filtered.length === 0) { results.innerHTML = '<p style="color:#8696a0;text-align:center;padding:20px;font-size:13px;">No user found</p>'; return; }
   for (const u of filtered) {
-    const div = document.createElement('div');
-    div.className = 'search-result-item';
+    const div = document.createElement('div'); div.className = 'search-result-item';
     const pic = await getUserAvatar(u.username);
-    const bioRes = await fetch(`/api/users/bio/${u.username}`);
-    const bioData = await bioRes.json();
+    const bioRes = await fetch(`/api/users/bio/${u.username}`); const bioData = await bioRes.json();
     div.innerHTML = pic
       ? `<img src="${pic}" class="chat-list-avatar"> <div><div style="color:#e9edef;">${u.username}</div><div style="color:#8696a0;font-size:12px;">${bioData.bio || 'Using priconkt'}</div></div>`
       : `<span class="chat-list-initial">${u.username[0].toUpperCase()}</span> <div><div style="color:#e9edef;">${u.username}</div><div style="color:#8696a0;font-size:12px;">${bioData.bio || 'Using priconkt'}</div></div>`;
@@ -1429,18 +1029,9 @@ async function searchUsers(query) {
   }
 }
 
-document.addEventListener('keypress', e => {
-  if (e.key === 'Enter') sendMessage();
-});
+document.addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
 
 // ============ STATUS ============
-let statusBgColor = '#111b21';
-let statusFileUrl = null;
-let statusFileType = null;
-let currentStatusList = [];
-let statusTimer = null;
-let currentStatusIdx = 0;
-
 function openStatusTab() {
   closeAllPanels();
   document.getElementById('status-panel').classList.add('open');
@@ -1458,53 +1049,36 @@ async function loadStatuses() {
     fetch(`/api/status/mine/${currentUser}`).then(r => r.json()),
     fetch(`/api/status/all/${currentUser}`).then(r => r.json())
   ]);
-
   const myList = document.getElementById('my-status-list');
   myList.innerHTML = '';
   if (mine.length === 0) {
     myList.innerHTML = '<p style="color:#8696a0;padding:12px 16px;font-size:13px;">No active status. Tap + Add to post.</p>';
   } else {
     mine.forEach((s, i) => {
-      const div = document.createElement('div');
-      div.className = 'status-item';
+      const div = document.createElement('div'); div.className = 'status-item';
       const timeLeft = Math.floor((new Date(s.expiresAt) - Date.now()) / 3600000);
       div.innerHTML = `
         <div class="status-ring my-status-ring"></div>
-        <div class="status-item-info">
-          <span>My Status</span>
-          <span class="status-time">${timeLeft}h left · ${s.viewedBy.length} views</span>
-        </div>
+        <div class="status-item-info"><span>My Status</span><span class="status-time">${timeLeft}h left · ${s.viewedBy.length} views</span></div>
         <button onclick="deleteMyStatus('${s._id}')" style="background:none;border:none;color:#e53935;cursor:pointer;width:auto;height:auto;font-size:16px;">🗑️</button>
       `;
       div.onclick = (e) => { if (!e.target.closest('button')) viewStatus(mine, i, 'My Status'); };
       myList.appendChild(div);
     });
   }
-
   const othersList = document.getElementById('others-status-list');
   othersList.innerHTML = '';
   const usernames = Object.keys(others);
-  if (usernames.length === 0) {
-    othersList.innerHTML = '<p style="color:#8696a0;padding:12px 16px;font-size:13px;">No recent updates from your contacts.</p>';
-    return;
-  }
+  if (usernames.length === 0) { othersList.innerHTML = '<p style="color:#8696a0;padding:12px 16px;font-size:13px;">No recent updates from your contacts.</p>'; return; }
   for (const username of usernames) {
-    const statuses = others[username];
-    const latest = statuses[0];
+    const statuses = others[username]; const latest = statuses[0];
     const hasUnviewed = statuses.some(s => !s.viewedBy.includes(currentUser));
     const pic = await getUserAvatar(username);
-    const div = document.createElement('div');
-    div.className = 'status-item';
-    const d = new Date(latest.createdAt);
-    const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const div = document.createElement('div'); div.className = 'status-item';
+    const d = new Date(latest.createdAt); const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     div.innerHTML = `
-      ${pic
-        ? `<img src="${pic}" class="status-avatar-thumb" style="border: 2px solid ${hasUnviewed ? '#00a884' : '#555'};">`
-        : `<span class="status-avatar-initial" style="border: 2px solid ${hasUnviewed ? '#00a884' : '#555'};">${username[0].toUpperCase()}</span>`}
-      <div class="status-item-info">
-        <span style="color:#e9edef;">${username}</span>
-        <span class="status-time">${timeStr}</span>
-      </div>
+      ${pic ? `<img src="${pic}" class="status-avatar-thumb" style="border: 2px solid ${hasUnviewed ? '#00a884' : '#555'};">` : `<span class="status-avatar-initial" style="border: 2px solid ${hasUnviewed ? '#00a884' : '#555'};">${username[0].toUpperCase()}</span>`}
+      <div class="status-item-info"><span style="color:#e9edef;">${username}</span><span class="status-time">${timeStr}</span></div>
     `;
     div.onclick = () => viewStatus(statuses, 0, username);
     othersList.appendChild(div);
@@ -1512,65 +1086,38 @@ async function loadStatuses() {
 }
 
 function viewStatus(statuses, startIdx, username) {
-  currentStatusList = statuses;
-  currentStatusIdx = startIdx;
+  currentStatusList = statuses; currentStatusIdx = startIdx;
   document.getElementById('status-view-screen').style.display = 'flex';
   showStatusAt(currentStatusIdx, username);
-  fetch(`/api/status/view/${statuses[startIdx]._id}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: currentUser })
-  });
+  fetch(`/api/status/view/${statuses[startIdx]._id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: currentUser }) });
 }
 
 function showStatusAt(idx, username) {
   const s = currentStatusList[idx];
   document.getElementById('status-view-username').textContent = username || s.username;
-  const d = new Date(s.createdAt);
-  document.getElementById('status-view-time').textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const content = document.getElementById('status-view-content');
-  content.style.background = s.backgroundColor || '#111b21';
+  const d = new Date(s.createdAt); document.getElementById('status-view-time').textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const content = document.getElementById('status-view-content'); content.style.background = s.backgroundColor || '#111b21';
   document.getElementById('status-view-text').textContent = s.text || '';
-  const img = document.getElementById('status-view-img');
-  const vid = document.getElementById('status-view-vid');
-  img.style.display = 'none';
-  vid.style.display = 'none';
-  if (s.fileType === 'image' && s.fileUrl) {
-    img.src = s.fileUrl; img.style.display = 'block';
-  } else if (s.fileType === 'video' && s.fileUrl) {
-    vid.src = s.fileUrl; vid.style.display = 'block';
-  }
+  const img = document.getElementById('status-view-img'); const vid = document.getElementById('status-view-vid');
+  img.style.display = 'none'; vid.style.display = 'none';
+  if (s.fileType === 'image' && s.fileUrl) { img.src = s.fileUrl; img.style.display = 'block'; }
+  else if (s.fileType === 'video' && s.fileUrl) { vid.src = s.fileUrl; vid.style.display = 'block'; }
   clearInterval(statusTimer);
-  const fill = document.getElementById('status-progress-fill');
-  fill.style.transition = 'none';
-  fill.style.width = '0%';
-  setTimeout(() => {
-    fill.style.transition = 'width 5s linear';
-    fill.style.width = '100%';
-  }, 50);
+  const fill = document.getElementById('status-progress-fill'); fill.style.transition = 'none'; fill.style.width = '0%';
+  setTimeout(() => { fill.style.transition = 'width 5s linear'; fill.style.width = '100%'; }, 50);
   statusTimer = setTimeout(() => {
-    if (currentStatusIdx < currentStatusList.length - 1) {
-      currentStatusIdx++;
-      showStatusAt(currentStatusIdx, username);
-    } else {
-      closeStatusView();
-    }
+    if (currentStatusIdx < currentStatusList.length - 1) { currentStatusIdx++; showStatusAt(currentStatusIdx, username); }
+    else { closeStatusView(); }
   }, 5000);
 }
 
-function closeStatusView() {
-  clearInterval(statusTimer);
-  document.getElementById('status-view-screen').style.display = 'none';
-  loadStatuses();
-}
+function closeStatusView() { clearInterval(statusTimer); document.getElementById('status-view-screen').style.display = 'none'; loadStatuses(); }
 
 function openPostStatus() {
   closeStatusTab();
   document.getElementById('post-status-panel').classList.add('open');
   document.getElementById('post-status-overlay').classList.add('open');
-  statusBgColor = '#111b21';
-  statusFileUrl = null;
-  statusFileType = null;
+  statusBgColor = '#111b21'; statusFileUrl = null; statusFileType = null;
   document.getElementById('status-text-input').value = '';
   document.getElementById('status-preview-text-show').textContent = '';
   document.getElementById('status-preview-img').style.display = 'none';
@@ -1583,64 +1130,36 @@ function closePostStatus() {
   document.getElementById('post-status-overlay').classList.remove('open');
 }
 
-function previewStatusText(val) {
-  document.getElementById('status-preview-text-show').textContent = val;
-}
-
-function setStatusBg(color) {
-  statusBgColor = color;
-  document.getElementById('status-preview-bg').style.background = color;
-}
+function previewStatusText(val) { document.getElementById('status-preview-text-show').textContent = val; }
+function setStatusBg(color) { statusBgColor = color; document.getElementById('status-preview-bg').style.background = color; }
 
 async function previewStatusFile(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const formData = new FormData();
-  formData.append('file', file);
+  const file = input.files[0]; if (!file) return;
+  const formData = new FormData(); formData.append('file', file);
   const res = await fetch('/api/media', { method: 'POST', body: formData });
   const data = await res.json();
   if (data.fileUrl) {
-    statusFileUrl = data.fileUrl;
-    statusFileType = data.fileType;
-    if (data.fileType === 'image') {
-      document.getElementById('status-preview-img').src = data.fileUrl;
-      document.getElementById('status-preview-img').style.display = 'block';
-      document.getElementById('status-preview-vid').style.display = 'none';
-    } else if (data.fileType === 'video') {
-      document.getElementById('status-preview-vid').src = data.fileUrl;
-      document.getElementById('status-preview-vid').style.display = 'block';
-      document.getElementById('status-preview-img').style.display = 'none';
-    }
+    statusFileUrl = data.fileUrl; statusFileType = data.fileType;
+    if (data.fileType === 'image') { document.getElementById('status-preview-img').src = data.fileUrl; document.getElementById('status-preview-img').style.display = 'block'; document.getElementById('status-preview-vid').style.display = 'none'; }
+    else if (data.fileType === 'video') { document.getElementById('status-preview-vid').src = data.fileUrl; document.getElementById('status-preview-vid').style.display = 'block'; document.getElementById('status-preview-img').style.display = 'none'; }
   }
 }
 
 async function submitStatus() {
   const text = document.getElementById('status-text-input').value.trim();
   if (!text && !statusFileUrl) return alert('Add text or a photo/video');
-  const formData = new FormData();
-  formData.append('username', currentUser);
-  formData.append('text', text);
-  formData.append('backgroundColor', statusBgColor);
+  const formData = new FormData(); formData.append('username', currentUser); formData.append('text', text); formData.append('backgroundColor', statusBgColor);
   const res = await fetch('/api/status', { method: 'POST', body: formData });
   const data = await res.json();
-  if (data.success) {
-    closePostStatus();
-    openStatusTab();
-  } else {
-    alert('Failed to post status');
-  }
+  if (data.success) { closePostStatus(); openStatusTab(); } else { alert('Failed to post status'); }
 }
 
 async function deleteMyStatus(statusId) {
   if (!window.confirm('Delete this status?')) return;
-  await fetch(`/api/status/${statusId}`, { method: 'DELETE' });
-  loadStatuses();
+  await fetch(`/api/status/${statusId}`, { method: 'DELETE' }); loadStatuses();
 }
 
 // ============ DISCOVER (Nearby) ============
-let isVisible = false;
-let myLocation = null;
-
 async function initVisibility() {
   try {
     const res = await fetch(`/api/users/visibility/${currentUser}`);
@@ -1656,317 +1175,11 @@ function updateVisibilityUI() {
   const visIcon = document.getElementById('vis-icon');
   const visLabel = document.getElementById('vis-label');
   const visDesc = document.getElementById('vis-desc');
-  if (visBtn) {
-    visBtn.style.background = isVisible ? '#00a884' : '#2a3942';
-    visBtn.style.color = isVisible ? 'white' : '#8696a0';
-    visBtn.title = isVisible ? 'Visible to Nearby (ON)' : 'Hidden from Nearby (OFF)';
-  }
-  if (visLabel) visLabel.textContent = isVisible ? 'You are Visible' : 'You are Hidden';
-  if (visIcon) visIcon.textContent = isVisible ? '👁️' : '🙈';
-  if (visDesc) visDesc.textContent = isVisible
-    ? 'Nearby users can discover you when they scan'
-    : 'Turn on visibility so nearby users can discover you';
-  if (visToggleBtn) visToggleBtn.textContent = isVisible ? 'Turn Off' : 'Turn On';
-  if (visToggleBtn) visToggleBtn.style.background = isVisible ? '#e53935' : '#00a884';
-}
-
-async function toggleVisibility() {
-  if (!isVisible) {
-    if (!navigator.geolocation) return alert('Geolocation not supported on this device');
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      isVisible = true;
-      await fetch('/api/users/visibility', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: currentUser, isVisible: true, lat: myLocation.lat, lng: myLocation.lng })
-      });
-      updateVisibilityUI();
-    }, (err) => {
-      alert('Location permission required to turn on visibility.\nPlease allow location access and try again.');
-    });
-  } else {
-    isVisible = false;
-    myLocation = null;
-    await fetch('/api/users/visibility', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: currentUser, isVisible: false })
-    });
-    updateVisibilityUI();
-  }
-}
-
-function openDiscover() {
-  closeAllPanels();
-  document.getElementById('discover-panel').classList.add('open');
-  document.getElementById('discover-overlay').classList.add('open');
-  updateVisibilityUI();
-  document.getElementById('discover-results').innerHTML = '';
-  document.getElementById('scan-status-msg').textContent = '';
-}
-
-function closeDiscover() {
-  document.getElementById('discover-panel').classList.remove('open');
-  document.getElementById('discover-overlay').classList.remove('open');
-  if (window.innerWidth <= 768) {
-    document.getElementById('sidebar').classList.remove('mobile-hidden');
-  }
-}
-
-async function scanNearby() {
-  const msg = document.getElementById('scan-status-msg');
-  const results = document.getElementById('discover-results');
-  msg.textContent = '📡 Scanning...';
-  results.innerHTML = '';
-  if (!navigator.geolocation) {
-    msg.textContent = '❌ Geolocation not supported';
-    return;
-  }
-  navigator.geolocation.getCurrentPosition(async (pos) => {
-    const lat = pos.coords.latitude;
-    const lng = pos.coords.longitude;
-    try {
-      const res = await fetch('/api/users/nearby', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: currentUser, lat, lng, radiusKm: 1 })
-      });
-      const users = await res.json();
-      if (users.length === 0) {
-        msg.textContent = '📡 No visible users nearby';
-        return;
-      }
-      msg.textContent = `Found ${users.length} user${users.length > 1 ? 's' : ''} nearby`;
-      for (const u of users) {
-        const div = document.createElement('div');
-        div.className = 'search-result-item';
-        div.style.cursor = 'pointer';
-        div.innerHTML = `
-          <span class="chat-list-initial" style="background:#00a884;">${u.username[0].toUpperCase()}</span>
-          <div>
-            <div style="color:#e9edef;font-size:15px;">📡 ${u.username}</div>
-            <div style="color:#8696a0;font-size:12px;">${u.bio || 'Using priconkt'}</div>
-          </div>
-        `;
-        div.onclick = () => { closeDiscover(); openPrivateChat(u.username); };
-        results.appendChild(div);
-      }
-    } catch (err) {
-      msg.textContent = '❌ Scan failed. Try again.';
-    }
-  }, () => {
-    msg.textContent = '❌ Location permission denied. Enable location to scan.';
-  });
-}
-
-// ============ PRIVACY CENTER ============
-let privacySettings = {};
-let ghostMode = false;
-
-async function initPrivacy() {
-  try {
-    const [privRes, ghostRes] = await Promise.all([
-      fetch(`/api/users/privacy/${currentUser}`),
-      fetch(`/api/users/ghost/${currentUser}`)
-    ]);
-    privacySettings = await privRes.json();
-    const ghostData = await ghostRes.json();
-    ghostMode = ghostData.ghostMode || false;
-    updateGhostUI();
-  } catch (e) {}
-}
-
-function updateGhostUI() {
-  const privBtn = document.getElementById('privacy-btn');
-  if (privBtn) {
-    privBtn.style.background = ghostMode ? '#8696a0' : '#2a3942';
-    privBtn.title = ghostMode ? 'Ghost Mode ON (click to manage)' : 'Privacy Center';
-    privBtn.textContent = ghostMode ? '👻' : '🛡️';
-  }
-}
-
-async function toggleGhostMode(enabled) {
-  ghostMode = enabled;
-  await fetch('/api/users/ghost', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: currentUser, ghostMode: enabled })
-  });
-  updateGhostUI();
-}
-
-async function openPrivacyCenter() {
-  closeAllPanels();
-  await initPrivacy();
-  const gt = document.getElementById('ghost-toggle');
-  if (gt) gt.checked = ghostMode;
-  if (privacySettings) {
-    const m = document.getElementById('priv-message');
-    const c = document.getElementById('priv-call');
-    const g = document.getElementById('priv-groups');
-    const o = document.getElementById('priv-online');
-    const r = document.getElementById('priv-read');
-    const n = document.getElementById('priv-nearby');
-    const f = document.getElementById('priv-forward');
-    if (m) m.value = privacySettings.whoCanMessage || 'everyone';
-    if (c) c.value = privacySettings.whoCanCall || 'everyone';
-    if (g) g.value = privacySettings.whoCanAddToGroups || 'everyone';
-    if (o) o.checked = privacySettings.showOnlineStatus !== false;
-    if (r) r.checked = privacySettings.showReadReceipts !== false;
-    if (n) n.checked = privacySettings.allowNearbyDiscovery !== false;
-    if (f) f.checked = privacySettings.allowForwarding !== false;
-  }
-  document.getElementById('privacy-panel').classList.add('open');
-  document.getElementById('privacy-overlay').classList.add('open');
-}
-
-function closePrivacyCenter() {
-  document.getElementById('privacy-panel').classList.remove('open');
-  document.getElementById('privacy-overlay').classList.remove('open');
-}
-
-async function savePrivacySettings() {
-  const settings = {
-    whoCanMessage: document.getElementById('priv-message').value,
-    whoCanCall: document.getElementById('priv-call').value,
-    whoCanAddToGroups: document.getElementById('priv-groups').value,
-    showOnlineStatus: document.getElementById('priv-online').checked,
-    showReadReceipts: document.getElementById('priv-read').checked,
-    allowNearbyDiscovery: document.getElementById('priv-nearby').checked,
-    allowForwarding: document.getElementById('priv-forward').checked
-  };
-  await fetch(`/api/users/privacy/${currentUser}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(settings)
-  });
-  privacySettings = settings;
-  closePrivacyCenter();
-  alert('Privacy settings saved ✅');
-}
-
-// ============ DISAPPEARING MESSAGES ============
-let disappearSeconds = 0;
-
-function openDisappearPicker() {
-  document.getElementById('disappear-picker').style.display = 'flex';
-  document.getElementById('disappear-overlay').style.display = 'block';
-}
-
-function closeDisappearPicker() {
-  document.getElementById('disappear-picker').style.display = 'none';
-  document.getElementById('disappear-overlay').style.display = 'none';
-}
-
-function setDisappearTimer(seconds) {
-  disappearSeconds = seconds;
-  const btn = document.getElementById('disappear-btn');
-  if (btn) {
-    btn.style.color = seconds > 0 ? '#00a884' : '#aebac1';
-    btn.title = seconds > 0
-      ? `Disappearing: ${seconds >= 86400 ? '1 day' : seconds >= 3600 ? '1 hour' : seconds >= 60 ? '1 min' : '10 sec'}`
-      : 'Disappearing Messages';
-  }
-  closeDisappearPicker();
-}
-
-// ============ CHAT THEMES ============
-const chatThemes = {
-  default: { bg: '#0b141a', msgBg: '#202c33', sentBg: '#005c4b' },
-  ocean:   { bg: '#0a1628', msgBg: '#0d3166', sentBg: '#005c8a' },
-  galaxy:  { bg: '#08001a', msgBg: '#1a0533', sentBg: '#2d0066' },
-  cricket: { bg: '#0a1f0a', msgBg: '#1b5e20', sentBg: '#2e7d32' },
-  gaming:  { bg: '#050010', msgBg: '#0a0020', sentBg: '#1a003a' },
-  couple:  { bg: '#1a0010', msgBg: '#4a0030', sentBg: '#880e4f' },
-  study:   { bg: '#001020', msgBg: '#0d2040', sentBg: '#0277bd' },
-  work:    { bg: '#121212', msgBg: '#212121', sentBg: '#37474f' },
-  sunset:  { bg: '#1a0800', msgBg: '#3e1000', sentBg: '#bf360c' }
-};
-
-let currentChatTheme = 'default';
-
-function openThemePicker() {
-  document.getElementById('theme-picker').style.display = 'flex';
-  document.getElementById('theme-overlay').style.display = 'block';
-  document.querySelectorAll('.theme-opt').forEach(el => {
-    el.style.border = el.dataset.theme === currentChatTheme
-      ? '2px solid #00a884' : '2px solid transparent';
-  });
-}
-
-function closeThemePicker() {
-  document.getElementById('theme-picker').style.display = 'none';
-  document.getElementById('theme-overlay').style.display = 'none';
-}
-
-async function applyChatTheme(themeName) {
-  currentChatTheme = themeName;
-  const t = chatThemes[themeName] || chatThemes.default;
-  const msgs = document.getElementById('messages');
-  if (msgs) msgs.style.background = t.bg;
-  document.querySelectorAll('.message-bubble.received').forEach(b => {
-    b.style.background = t.msgBg;
-  });
-  document.querySelectorAll('.message-bubble.sent').forEach(b => {
-    b.style.background = t.sentBg;
-  });
-  document.querySelectorAll('.theme-opt').forEach(el => {
-    el.style.border = el.dataset.theme === themeName
-      ? '2px solid #00a884' : '2px solid transparent';
-  });
-  const chatKey = activeChatType === 'group' ? `group_${activeGroupId}` : `user_${activeChat}`;
-  if (chatKey && currentUser) {
-    await fetch('/api/users/theme', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: currentUser, chatKey, theme: themeName })
-    });
-  }
-}
-
-async function loadChatTheme(chatKey) {
-  try {
-    const res = await fetch(`/api/users/theme/${currentUser}/${chatKey}`);
-    const data = await res.json();
-    const theme = data.theme || 'default';
-    currentChatTheme = theme;
-    applyChatTheme(theme);
-  } catch (e) {
-    currentChatTheme = 'default';
-    applyChatTheme('default');
-  }
-}
-
-// ============ ENHANCED NEARBY (timed) ============
-
-async function initVisibility() {
-  try {
-    const res = await fetch(`/api/users/visibility/${currentUser}`);
-    const data = await res.json();
-    isVisible = data.isVisible || false;
-    updateVisibilityUI();
-  } catch (e) {}
-}
-
-function updateVisibilityUI() {
-  const visBtn = document.getElementById('visibility-btn');
-  const visToggleBtn = document.getElementById('vis-toggle-btn');
-  const visIcon = document.getElementById('vis-icon');
-  const visLabel = document.getElementById('vis-label');
-  const visDesc = document.getElementById('vis-desc');
-  if (visBtn) {
-    visBtn.style.background = isVisible ? '#00a884' : '#2a3942';
-    visBtn.style.color = isVisible ? 'white' : '#8696a0';
-  }
+  if (visBtn) { visBtn.style.background = isVisible ? '#00a884' : '#2a3942'; visBtn.style.color = isVisible ? 'white' : '#8696a0'; }
   if (visLabel) visLabel.textContent = isVisible ? '👁️ You are Visible' : '🙈 You are Hidden';
-  if (visDesc) visDesc.textContent = isVisible
-    ? 'Nearby users can discover you when they scan'
-    : 'Turn on visibility so nearby users can discover you';
-  if (visToggleBtn) {
-    visToggleBtn.textContent = isVisible ? 'Turn Off' : 'Turn On';
-    visToggleBtn.style.background = isVisible ? '#e53935' : '#00a884';
-  }
+  if (visIcon) visIcon.textContent = isVisible ? '👁️' : '🙈';
+  if (visDesc) visDesc.textContent = isVisible ? 'Nearby users can discover you when they scan' : 'Turn on visibility so nearby users can discover you';
+  if (visToggleBtn) { visToggleBtn.textContent = isVisible ? 'Turn Off' : 'Turn On'; visToggleBtn.style.background = isVisible ? '#e53935' : '#00a884'; }
 }
 
 async function toggleVisibility() {
@@ -1977,43 +1190,20 @@ async function toggleVisibility() {
     navigator.geolocation.getCurrentPosition(async (pos) => {
       myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       isVisible = true;
-      await fetch('/api/users/visibility', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: currentUser,
-          isVisible: true,
-          lat: myLocation.lat,
-          lng: myLocation.lng,
-          durationMinutes: duration
-        })
-      });
+      await fetch('/api/users/visibility', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: currentUser, isVisible: true, lat: myLocation.lat, lng: myLocation.lng, durationMinutes: duration }) });
       updateVisibilityUI();
-      if (duration > 0) {
-        setTimeout(() => { isVisible = false; updateVisibilityUI(); }, duration * 60 * 1000);
-      }
+      if (duration > 0) { setTimeout(() => { isVisible = false; updateVisibilityUI(); }, duration * 60 * 1000); }
     }, () => alert('Location permission required'));
   } else {
-    isVisible = false;
-    myLocation = null;
-    await fetch('/api/users/visibility', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: currentUser, isVisible: false })
-    });
+    isVisible = false; myLocation = null;
+    await fetch('/api/users/visibility', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: currentUser, isVisible: false }) });
     updateVisibilityUI();
   }
 }
 
 function pickVisibilityDuration() {
   return new Promise((resolve) => {
-    const choice = window.prompt(
-      'How long do you want to be visible?\n' +
-      'Type:\n' +
-      '1 → 15 minutes\n' +
-      '2 → 1 hour\n' +
-      '3 → Until I turn off\n'
-    );
+    const choice = window.prompt('How long do you want to be visible?\nType:\n1 → 15 minutes\n2 → 1 hour\n3 → Until I turn off\n');
     if (choice === '1') resolve(15);
     else if (choice === '2') resolve(60);
     else if (choice === '3') resolve(0);
@@ -2033,105 +1223,160 @@ function openDiscover() {
 function closeDiscover() {
   document.getElementById('discover-panel').classList.remove('open');
   document.getElementById('discover-overlay').classList.remove('open');
-  if (window.innerWidth <= 768) {
-    document.getElementById('sidebar').classList.remove('mobile-hidden');
-  }
+  if (window.innerWidth <= 768) { document.getElementById('sidebar').classList.remove('mobile-hidden'); }
 }
 
 async function scanNearby() {
-  const msg = document.getElementById('scan-status-msg');
-  const results = document.getElementById('discover-results');
-  msg.textContent = '📡 Scanning...';
-  results.innerHTML = '';
-  if (!navigator.geolocation) {
-    msg.textContent = '❌ Geolocation not supported';
-    return;
-  }
+  const msg = document.getElementById('scan-status-msg'); const results = document.getElementById('discover-results');
+  msg.textContent = '📡 Scanning...'; results.innerHTML = '';
+  if (!navigator.geolocation) { msg.textContent = '❌ Geolocation not supported'; return; }
   navigator.geolocation.getCurrentPosition(async (pos) => {
     try {
-      const res = await fetch('/api/users/nearby', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: currentUser,
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          radiusKm: 1
-        })
-      });
+      const res = await fetch('/api/users/nearby', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: currentUser, lat: pos.coords.latitude, lng: pos.coords.longitude, radiusKm: 1 }) });
       const users = await res.json();
-      if (users.length === 0) {
-        msg.textContent = '📡 No visible users nearby';
-        return;
-      }
+      if (users.length === 0) { msg.textContent = '📡 No visible users nearby'; return; }
       msg.textContent = `Found ${users.length} user${users.length > 1 ? 's' : ''} nearby`;
       for (const u of users) {
-        const div = document.createElement('div');
-        div.className = 'search-result-item';
-        div.style.cursor = 'pointer';
-        div.innerHTML = `
-          <span class="chat-list-initial" style="background:#00a884;">${u.username[0].toUpperCase()}</span>
-          <div>
-            <div style="color:#e9edef;font-size:15px;">📡 ${u.username}</div>
-            <div style="color:#8696a0;font-size:12px;">${u.bio || 'Using priconkt'}</div>
-          </div>
-        `;
+        const div = document.createElement('div'); div.className = 'search-result-item'; div.style.cursor = 'pointer';
+        div.innerHTML = `<span class="chat-list-initial" style="background:#00a884;">${u.username[0].toUpperCase()}</span><div><div style="color:#e9edef;font-size:15px;">📡 ${u.username}</div><div style="color:#8696a0;font-size:12px;">${u.bio || 'Using priconkt'}</div></div>`;
         div.onclick = () => { closeDiscover(); openPrivateChat(u.username); };
         results.appendChild(div);
       }
-    } catch (err) {
-      msg.textContent = '❌ Scan failed. Try again.';
-    }
-  }, () => {
-    msg.textContent = '❌ Location permission denied.';
-  });
+    } catch (err) { msg.textContent = '❌ Scan failed. Try again.'; }
+  }, () => { msg.textContent = '❌ Location permission denied.'; });
+}
+
+// ============ PRIVACY CENTER ============
+async function initPrivacy() {
+  try {
+    const [privRes, ghostRes] = await Promise.all([fetch(`/api/users/privacy/${currentUser}`), fetch(`/api/users/ghost/${currentUser}`)]);
+    privacySettings = await privRes.json(); const ghostData = await ghostRes.json();
+    ghostMode = ghostData.ghostMode || false; updateGhostUI();
+  } catch (e) {}
+}
+
+function updateGhostUI() {
+  const privBtn = document.getElementById('privacy-btn');
+  if (privBtn) { privBtn.style.background = ghostMode ? '#8696a0' : '#2a3942'; privBtn.title = ghostMode ? 'Ghost Mode ON (click to manage)' : 'Privacy Center'; privBtn.textContent = ghostMode ? '👻' : '🛡️'; }
+}
+
+async function toggleGhostMode(enabled) {
+  ghostMode = enabled;
+  await fetch('/api/users/ghost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: currentUser, ghostMode: enabled }) });
+  updateGhostUI();
+}
+
+async function openPrivacyCenter() {
+  closeAllPanels();
+  await initPrivacy();
+  const gt = document.getElementById('ghost-toggle'); if (gt) gt.checked = ghostMode;
+  if (privacySettings) {
+    const m = document.getElementById('priv-message'); const c = document.getElementById('priv-call');
+    const g = document.getElementById('priv-groups'); const o = document.getElementById('priv-online');
+    const r = document.getElementById('priv-read'); const n = document.getElementById('priv-nearby'); const f = document.getElementById('priv-forward');
+    if (m) m.value = privacySettings.whoCanMessage || 'everyone'; if (c) c.value = privacySettings.whoCanCall || 'everyone';
+    if (g) g.value = privacySettings.whoCanAddToGroups || 'everyone'; if (o) o.checked = privacySettings.showOnlineStatus !== false;
+    if (r) r.checked = privacySettings.showReadReceipts !== false; if (n) n.checked = privacySettings.allowNearbyDiscovery !== false; if (f) f.checked = privacySettings.allowForwarding !== false;
+  }
+  document.getElementById('privacy-panel').classList.add('open');
+  document.getElementById('privacy-overlay').classList.add('open');
+}
+
+function closePrivacyCenter() {
+  document.getElementById('privacy-panel').classList.remove('open');
+  document.getElementById('privacy-overlay').classList.remove('open');
+}
+
+async function savePrivacySettings() {
+  const settings = {
+    whoCanMessage: document.getElementById('priv-message').value, whoCanCall: document.getElementById('priv-call').value,
+    whoCanAddToGroups: document.getElementById('priv-groups').value, showOnlineStatus: document.getElementById('priv-online').checked,
+    showReadReceipts: document.getElementById('priv-read').checked, allowNearbyDiscovery: document.getElementById('priv-nearby').checked,
+    allowForwarding: document.getElementById('priv-forward').checked
+  };
+  await fetch(`/api/users/privacy/${currentUser}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) });
+  privacySettings = settings; closePrivacyCenter(); alert('Privacy settings saved ✅');
+}
+
+// ============ DISAPPEARING MESSAGES ============
+function openDisappearPicker() { document.getElementById('disappear-picker').style.display = 'flex'; document.getElementById('disappear-overlay').style.display = 'block'; }
+function closeDisappearPicker() { document.getElementById('disappear-picker').style.display = 'none'; document.getElementById('disappear-overlay').style.display = 'none'; }
+
+function setDisappearTimer(seconds) {
+  disappearSeconds = seconds;
+  const btn = document.getElementById('disappear-btn');
+  if (btn) {
+    btn.style.color = seconds > 0 ? '#00a884' : '#aebac1';
+    btn.title = seconds > 0 ? `Disappearing: ${seconds >= 86400 ? '1 day' : seconds >= 3600 ? '1 hour' : seconds >= 60 ? '1 min' : '10 sec'}` : 'Disappearing Messages';
+  }
+  closeDisappearPicker();
+}
+
+// ============ CHAT THEMES ============
+const chatThemes = {
+  default: { bg: '#0b141a', msgBg: '#202c33', sentBg: '#005c4b' },
+  ocean:   { bg: '#0a1628', msgBg: '#0d3166', sentBg: '#005c8a' },
+  galaxy:  { bg: '#08001a', msgBg: '#1a0533', sentBg: '#2d0066' },
+  cricket: { bg: '#0a1f0a', msgBg: '#1b5e20', sentBg: '#2e7d32' },
+  gaming:  { bg: '#050010', msgBg: '#0a0020', sentBg: '#1a003a' },
+  couple:  { bg: '#1a0010', msgBg: '#4a0030', sentBg: '#880e4f' },
+  study:   { bg: '#001020', msgBg: '#0d2040', sentBg: '#0277bd' },
+  work:    { bg: '#121212', msgBg: '#212121', sentBg: '#37474f' },
+  sunset:  { bg: '#1a0800', msgBg: '#3e1000', sentBg: '#bf360c' }
+};
+
+function openThemePicker() {
+  document.getElementById('theme-picker').style.display = 'flex'; document.getElementById('theme-overlay').style.display = 'block';
+  document.querySelectorAll('.theme-opt').forEach(el => { el.style.border = el.dataset.theme === currentChatTheme ? '2px solid #00a884' : '2px solid transparent'; });
+}
+
+function closeThemePicker() { document.getElementById('theme-picker').style.display = 'none'; document.getElementById('theme-overlay').style.display = 'none'; }
+
+async function applyChatTheme(themeName) {
+  currentChatTheme = themeName;
+  const t = chatThemes[themeName] || chatThemes.default;
+  const msgs = document.getElementById('messages'); if (msgs) msgs.style.background = t.bg;
+  document.querySelectorAll('.message-bubble.received').forEach(b => { b.style.background = t.msgBg; });
+  document.querySelectorAll('.message-bubble.sent').forEach(b => { b.style.background = t.sentBg; });
+  document.querySelectorAll('.theme-opt').forEach(el => { el.style.border = el.dataset.theme === themeName ? '2px solid #00a884' : '2px solid transparent'; });
+  const chatKey = activeChatType === 'group' ? `group_${activeGroupId}` : `user_${activeChat}`;
+  if (chatKey && currentUser) {
+    await fetch('/api/users/theme', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: currentUser, chatKey, theme: themeName }) });
+  }
+}
+
+async function loadChatTheme(chatKey) {
+  try {
+    const res = await fetch(`/api/users/theme/${currentUser}/${chatKey}`);
+    const data = await res.json(); const theme = data.theme || 'default';
+    currentChatTheme = theme; applyChatTheme(theme);
+  } catch (e) { currentChatTheme = 'default'; applyChatTheme('default'); }
 }
 
 // ============ VOICE MESSAGES ============
-let mediaRecorder = null;
-let audioChunks = [];
-let isRecording = false;
-let voiceRecognition = null;
+let mediaRecorder = null; let audioChunks = []; let isRecording = false; let voiceRecognition = null;
 
 async function startVoiceRecord(e) {
   if (e) e.preventDefault();
   if (isRecording) return;
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    isRecording = true;
-    audioChunks = [];
+    isRecording = true; audioChunks = [];
     mediaRecorder = new MediaRecorder(stream);
     mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
     mediaRecorder.start();
     const micBtn = document.getElementById('mic-btn');
-    if (micBtn) {
-      micBtn.textContent = '🔴';
-      micBtn.style.color = '#e53935';
-    }
-
-    // Live transcription (Web Speech API)
+    if (micBtn) { micBtn.textContent = '🔴'; micBtn.style.color = '#e53935'; }
     if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       voiceRecognition = new SpeechRecognition();
-      voiceRecognition.continuous = true;
-      voiceRecognition.interimResults = true;
-      voiceRecognition.lang = 'en-IN';
+      voiceRecognition.continuous = true; voiceRecognition.interimResults = true; voiceRecognition.lang = 'en-IN';
       let transcript = '';
-      voiceRecognition.onresult = (event) => {
-        transcript = Array.from(event.results).map(r => r[0].transcript).join(' ');
-        const input = document.getElementById('message-input');
-        if (input && transcript) input.placeholder = '🎙️ ' + transcript;
-      };
-      voiceRecognition.start();
-      voiceRecognition._lastTranscript = '';
-      voiceRecognition.onend = () => {
-        voiceRecognition._lastTranscript = transcript;
-      };
+      voiceRecognition.onresult = (event) => { transcript = Array.from(event.results).map(r => r[0].transcript).join(' '); const input = document.getElementById('message-input'); if (input && transcript) input.placeholder = '🎙️ ' + transcript; };
+      voiceRecognition.start(); voiceRecognition._lastTranscript = '';
+      voiceRecognition.onend = () => { voiceRecognition._lastTranscript = transcript; };
     }
-  } catch (err) {
-    alert('Microphone permission required for voice messages.');
-    isRecording = false;
-  }
+  } catch (err) { alert('Microphone permission required for voice messages.'); isRecording = false; }
 }
 
 async function stopVoiceRecord(e) {
@@ -2140,23 +1385,13 @@ async function stopVoiceRecord(e) {
   isRecording = false;
   const micBtn = document.getElementById('mic-btn');
   if (micBtn) { micBtn.textContent = '🎙️'; micBtn.style.color = '#8696a0'; }
-  const input = document.getElementById('message-input');
-  if (input) input.placeholder = 'Type a message...';
-
+  const input = document.getElementById('message-input'); if (input) input.placeholder = 'Type a message...';
   let transcript = '';
-  if (voiceRecognition) {
-    voiceRecognition.stop();
-    transcript = voiceRecognition._lastTranscript || '';
-    voiceRecognition = null;
-  }
-
+  if (voiceRecognition) { voiceRecognition.stop(); transcript = voiceRecognition._lastTranscript || ''; voiceRecognition = null; }
   mediaRecorder.onstop = async () => {
     const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-    const duration = Math.round(audioChunks.length * 0.1);
     if (audioBlob.size < 1000) return;
-
-    const formData = new FormData();
-    formData.append('file', audioBlob, 'voice_' + Date.now() + '.webm');
+    const formData = new FormData(); formData.append('file', audioBlob, 'voice_' + Date.now() + '.webm');
     try {
       const res = await fetch('/api/media', { method: 'POST', body: formData });
       const data = await res.json();
@@ -2164,17 +1399,9 @@ async function stopVoiceRecord(e) {
         const tempId = 'temp_' + Date.now();
         showVoiceMessage(currentUser, data.fileUrl, transcript, new Date().toLocaleTimeString(), tempId, 'sent');
         if (activeChatType === 'private' && activeChat) {
-          socket.emit('private_message', {
-            receiver: activeChat, text: transcript || '',
-            fileUrl: data.fileUrl, fileType: 'voice',
-            fileName: transcript || 'Voice message'
-          });
+          socket.emit('private_message', { receiver: activeChat, text: transcript || '', fileUrl: data.fileUrl, fileType: 'voice', fileName: transcript || 'Voice message' });
         } else if (activeChatType === 'group' && activeGroupId) {
-          socket.emit('group_message', {
-            groupId: activeGroupId, text: transcript || '',
-            fileUrl: data.fileUrl, fileType: 'voice',
-            fileName: transcript || 'Voice message'
-          });
+          socket.emit('group_message', { groupId: activeGroupId, text: transcript || '', fileUrl: data.fileUrl, fileType: 'voice', fileName: transcript || 'Voice message' });
         }
       }
     } catch (err) { console.error('Voice upload failed:', err); }
@@ -2185,59 +1412,26 @@ async function stopVoiceRecord(e) {
 
 function showVoiceMessage(sender, audioUrl, transcript, time, msgId, status) {
   const messages = document.getElementById('messages');
-  const bubble = document.createElement('div');
-  const isMine = sender === currentUser;
+  const bubble = document.createElement('div'); const isMine = sender === currentUser;
   bubble.className = isMine ? 'message-bubble sent' : 'message-bubble received';
   if (msgId) bubble.dataset.msgId = msgId;
-  bubble.dataset.fileUrl = audioUrl;
-  bubble.dataset.fileType = 'voice';
-  bubble.dataset.isMine = isMine ? '1' : '0';
-  bubble.dataset.msgSender = sender;
-  bubble.dataset.status = status || 'sent';
+  bubble.dataset.fileUrl = audioUrl; bubble.dataset.fileType = 'voice'; bubble.dataset.isMine = isMine ? '1' : '0'; bubble.dataset.msgSender = sender; bubble.dataset.status = status || 'sent';
   const dotsHtml = getDotsHtml(status, isMine);
-  bubble.innerHTML = `
-    <span class="sender">${sender}</span>
-    <div class="voice-bubble">
-      <button class="voice-play-btn" onclick="playVoice(this, '${audioUrl}')">▶</button>
-      <div class="voice-wave">
-        <div class="voice-bar"></div><div class="voice-bar"></div>
-        <div class="voice-bar"></div><div class="voice-bar"></div>
-        <div class="voice-bar"></div><div class="voice-bar"></div>
-        <div class="voice-bar"></div><div class="voice-bar"></div>
-      </div>
-      <span class="voice-duration">🎙️</span>
-    </div>
-    ${transcript ? `<div class="voice-transcript">📝 ${transcript}</div>` : ''}
-    <span class="time">${time}${dotsHtml}</span>
-  `;
-  if (!isMine) {
-    bubble.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      showContextMenu(e.clientX, e.clientY, bubble);
-    });
-  }
-  messages.appendChild(bubble);
-  messages.scrollTop = messages.scrollHeight;
+  bubble.innerHTML = `<span class="sender">${sender}</span><div class="voice-bubble"><button class="voice-play-btn" onclick="playVoice(this, '${audioUrl}')">▶</button><div class="voice-wave"><div class="voice-bar"></div><div class="voice-bar"></div><div class="voice-bar"></div><div class="voice-bar"></div><div class="voice-bar"></div><div class="voice-bar"></div><div class="voice-bar"></div><div class="voice-bar"></div></div><span class="voice-duration">🎙️</span></div>${transcript ? `<div class="voice-transcript">📝 ${transcript}</div>` : ''}<span class="time">${time}${dotsHtml}</span>`;
+  messages.appendChild(bubble); messages.scrollTop = messages.scrollHeight;
 }
 
 let currentAudio = null;
 function playVoice(btn, audioUrl) {
   if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-  const audio = new Audio(audioUrl);
-  currentAudio = audio;
-  btn.textContent = '⏸';
-  audio.play();
-  audio.onended = () => { btn.textContent = '▶'; currentAudio = null; };
-  audio.onerror = () => { btn.textContent = '▶'; };
+  const audio = new Audio(audioUrl); currentAudio = audio; btn.textContent = '⏸';
+  audio.play(); audio.onended = () => { btn.textContent = '▶'; currentAudio = null; }; audio.onerror = () => { btn.textContent = '▶'; };
 }
 
 // ============ UNIVERSAL TRANSLATION ============
-let translateTo = '';
-
 function setTranslateLang(lang) {
   translateTo = lang;
-  const sel = document.getElementById('translate-lang');
-  if (sel) sel.style.color = lang ? '#00a884' : '#8696a0';
+  const sel = document.getElementById('translate-lang'); if (sel) sel.style.color = lang ? '#00a884' : '#8696a0';
   if (lang) translateVisibleMessages();
 }
 
@@ -2246,60 +1440,15 @@ async function translateVisibleMessages() {
   const bubbles = document.querySelectorAll('.message-bubble.received');
   for (const bubble of bubbles) {
     if (bubble.querySelector('.translated-text')) continue;
-    const textSpan = bubble.querySelector('.text');
-    if (!textSpan) continue;
-    const text = textSpan.textContent?.trim();
-    if (!text || text.startsWith('[') || text.startsWith('🚫')) continue;
-    const translated = await translateText(text, translateTo);
-    if (translated) {
-      const div = document.createElement('div');
-      div.className = 'translated-text';
-      div.textContent = '🌐 ' + translated;
-      bubble.appendChild(div);
-    }
-    await new Promise(r => setTimeout(r, 400));
-  }
-}
-
-// Override showMessage to add translate button on received messages
-const _originalShowMessage = showMessage;
-window._showMessageWithTranslate = async function(sender, text, time, msgId, isDeleted, fileUrl, fileType, fileName, replyTo, forwardedFrom, status) {
-  _originalShowMessage(sender, text, time, msgId, isDeleted, fileUrl, fileType, fileName, replyTo, forwardedFrom, status);
-  if (sender !== currentUser && text && !isDeleted && translateTo) {
-    const bubble = msgId
-      ? document.querySelector(`[data-msg-id="${msgId}"]`)
-      : document.querySelector('.message-bubble.received:last-child');
-    if (bubble) {
-      const translated = await translateText(text, translateTo);
-      if (translated && translated !== text) {
-        const transDiv = document.createElement('div');
-        transDiv.className = 'translated-text';
-        transDiv.textContent = '🌐 ' + translated;
-        const timeSpan = bubble.querySelector('.time');
-        if (timeSpan) bubble.insertBefore(transDiv, timeSpan);
-      }
-    }
-  }
-};
-
-async function translateVisibleMessages() {
-  if (!translateTo) return;
-  const bubbles = document.querySelectorAll('.message-bubble.received');
-  for (const bubble of bubbles) {
-    if (bubble.querySelector('.translated-text')) continue;
-    const textSpan = bubble.querySelector('.text');
-    const text = textSpan?.textContent;
+    const textSpan = bubble.querySelector('.text'); const text = textSpan?.textContent;
     if (!text || text === '[old message]' || text.startsWith('🚫')) continue;
     const isEncrypted = text.length > 30 && !text.includes(' ') && /^[A-Za-z0-9+/=]+$/.test(text);
     if (isEncrypted) continue;
     try {
       const translated = await translateText(text, translateTo);
       if (translated && translated !== text) {
-        const transDiv = document.createElement('div');
-        transDiv.className = 'translated-text';
-        transDiv.textContent = '🌐 ' + translated;
-        const timeSpan = bubble.querySelector('.time');
-        if (timeSpan) bubble.insertBefore(transDiv, timeSpan);
+        const transDiv = document.createElement('div'); transDiv.className = 'translated-text'; transDiv.textContent = '🌐 ' + translated;
+        const timeSpan = bubble.querySelector('.time'); if (timeSpan) bubble.insertBefore(transDiv, timeSpan);
       }
     } catch (e) {}
     await new Promise(r => setTimeout(r, 150));
@@ -2308,64 +1457,38 @@ async function translateVisibleMessages() {
 
 // ============ DELETE ACCOUNT ============
 async function deleteAccount() {
-  const confirm1 = confirm(
-    '⚠️ Delete your account?\n\nThis will permanently delete:\n• Your account\n• All your messages\n• All your data\n\nThis CANNOT be undone!'
-  );
+  const confirm1 = confirm('⚠️ Delete your account?\n\nThis will permanently delete:\n• Your account\n• All your messages\n• All your data\n\nThis CANNOT be undone!');
   if (!confirm1) return;
-
-  const confirm2 = confirm(
-    '🚨 FINAL WARNING\n\nPress OK to permanently delete account: ' + currentUser
-  );
+  const confirm2 = confirm('🚨 FINAL WARNING\n\nPress OK to permanently delete account: ' + currentUser);
   if (!confirm2) return;
-
   try {
-    const res = await fetch('/api/auth/delete-account', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: currentUser })
-    });
+    const res = await fetch('/api/auth/delete-account', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: currentUser }) });
     const data = await res.json();
-    if (data.success) {
-      alert('✅ Account deleted. Goodbye!');
-      localStorage.clear();
-      window.location.reload();
-    } else {
-      alert('❌ Error: ' + data.message);
-    }
-  } catch (err) {
-    alert('❌ Failed to delete account. Try again.');
-  }
+    if (data.success) { alert('✅ Account deleted. Goodbye!'); localStorage.clear(); window.location.reload(); }
+    else { alert('❌ Error: ' + data.message); }
+  } catch (err) { alert('❌ Failed to delete account. Try again.'); }
 }
 
 // ============ LOGOUT ============
 function logout() {
-  const confirm1 = confirm('Are you sure you want to logout?');
-  if (!confirm1) return;
-  localStorage.removeItem('token');
-  localStorage.removeItem('username');
-  currentUser = null;
-  socket.emit('set_username', null);
-  document.getElementById('auth-screen').style.display = 'flex';
-  document.getElementById('app-screen').style.display = 'none';
-  document.getElementById('auth-username').value = '';
-  document.getElementById('auth-password').value = '';
+  const confirm1 = confirm('Are you sure you want to logout?'); if (!confirm1) return;
+  localStorage.removeItem('token'); localStorage.removeItem('username');
+  currentUser = null; socket.emit('set_username', null);
+  document.getElementById('auth-screen').style.display = 'flex'; document.getElementById('app-screen').style.display = 'none';
+  document.getElementById('auth-username').value = ''; document.getElementById('auth-password').value = '';
 }
 
 // ============ MOBILE NAVIGATION ============
 function goBackToChats() {
-  closeSearch();
-  closeDiscover();
-  closeStatusTab();
-  closePrivacyCenter();
   closeAllPanels();
   document.getElementById('sidebar').classList.remove('mobile-hidden');
   document.getElementById('chat-area').classList.remove('mobile-open');
-  activeChat = null;
-  activeChatType = null;
+  activeChat = null; activeChatType = null;
 }
 
 function applyMobileOpen() {
   if (window.innerWidth <= 768) {
+    closeAllPanels(); // Close any open panels before showing chat
     document.getElementById('sidebar').classList.add('mobile-hidden');
     document.getElementById('chat-area').classList.add('mobile-open');
   }
@@ -2375,11 +1498,7 @@ function applyMobileOpen() {
 function openCreateGroupFromSearch() {
   const box = document.getElementById('create-group-inline');
   box.style.display = box.style.display === 'none' ? 'block' : 'none';
-  if (box.style.display === 'block') {
-    document.getElementById('group-name-inline').focus();
-    document.getElementById('search-results').innerHTML = '';
-    document.getElementById('search-input').value = '';
-  }
+  if (box.style.display === 'block') { document.getElementById('group-name-inline').focus(); document.getElementById('search-results').innerHTML = ''; document.getElementById('search-input').value = ''; }
 }
 
 async function createGroupFromSearch() {
@@ -2388,17 +1507,9 @@ async function createGroupFromSearch() {
   const allUsers = await fetch('/api/users').then(r => r.json());
   const members = allUsers.map(u => u.username);
   if (!members.includes(currentUser)) members.push(currentUser);
-  const res = await fetch('/api/groups/create', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, members, createdBy: currentUser })
-  });
-  const data = await res.json();
-  document.getElementById('group-name-inline').value = '';
-  document.getElementById('create-group-inline').style.display = 'none';
-  closeSearch();
-  loadGroups();
-  alert('Group "' + name + '" created!');
+  await fetch('/api/groups/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, members, createdBy: currentUser }) });
+  document.getElementById('group-name-inline').value = ''; document.getElementById('create-group-inline').style.display = 'none';
+  closeSearch(); loadGroups(); alert('Group "' + name + '" created!');
 }
 
 // ============ CLOSE ALL PANELS ============
@@ -2409,31 +1520,6 @@ function closeAllPanels() {
   ['search-overlay','privacy-overlay','status-overlay','post-status-overlay',
    'discover-overlay','my-profile-overlay-bg','contact-info-overlay','group-info-overlay']
   .forEach(id => { const el = document.getElementById(id); if (el) el.classList.remove('open'); });
-  if (window.innerWidth <= 768) {
-    document.getElementById('sidebar').classList.remove('mobile-hidden');
-  }
-}
-// ============ CLOSE ALL PANELS OLD ============
-function closeAllPanelsOLD() {
-  const panels = [
-    'search-panel', 'privacy-panel', 'status-panel',
-    'post-status-panel', 'discover-panel', 'my-profile-panel',
-    'contact-info-panel', 'group-info-panel'
-  ];
-  panels.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.classList.remove('open');
-  });
-  const overlays = [
-    'search-overlay', 'privacy-overlay', 'status-overlay',
-    'discover-overlay', 'my-profile-overlay-bg',
-    'contact-info-overlay', 'group-info-overlay',
-    'post-status-overlay'
-  ];
-  overlays.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.classList.remove('open');
-  });
   if (window.innerWidth <= 768) {
     document.getElementById('sidebar').classList.remove('mobile-hidden');
   }
