@@ -270,22 +270,20 @@ async function loadUsers() {
   const userMap = {};
   allUsers.forEach(u => { userMap[u.username] = u; });
   const list = document.getElementById('user-list');
-  list.innerHTML = '';
   if (lastMsgs.length === 0) {
     list.innerHTML = '<p style="color:#8696a0;text-align:center;padding:20px;font-size:13px;">No chats yet.<br>Tap 🔍 to search for friends.</p>';
     return;
   }
-  lastMsgs.sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
-  for (const last of lastMsgs) {
+  const sorted = lastMsgs
+    .filter(last => userMap[last._id] && last._id !== currentUser)
+    .sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
+  const avatars = await Promise.all(sorted.map(last => getUserAvatar(last._id)));
+  let html = '';
+  sorted.forEach((last, i) => {
     const username = last._id;
-    if (!userMap[username] || username === currentUser) continue;
-    const div = document.createElement('div');
-    div.className = 'user-item chat-list-item';
-    div.dataset.username = username;
-    const pic = await getUserAvatar(username);
+    const pic = avatars[i];
     const isBlocked = blockedUsers.includes(username);
     let lastText = '';
-    let lastTime = '';
     if (last.fileType === 'image') lastText = '📷 Photo';
     else if (last.fileType === 'video') lastText = '🎥 Video';
     else if (last.fileType === 'document') lastText = '📄 Document';
@@ -298,15 +296,15 @@ async function loadUsers() {
     if (lastText.length > 35) lastText = lastText.substring(0, 35) + '...';
     const d = new Date(last.lastTime);
     const today = new Date();
-    if (d.toDateString() === today.toDateString()) {
-      lastTime = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else {
-      lastTime = d.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
-    }
+    const lastTime = d.toDateString() === today.toDateString()
+      ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : d.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
     const avatarHtml = pic
       ? `<img src="${pic}" class="chat-list-avatar" onclick="event.stopPropagation();openContactInfo('${username}')">`
       : `<span class="chat-list-initial" onclick="event.stopPropagation();openContactInfo('${username}')">${username[0].toUpperCase()}</span>`;
-    div.innerHTML = `
+    const unread = unreadCounts[username];
+    const badge = unread ? `<span class="unread-badge" style="display:flex;">${unread}</span>` : `<span class="unread-badge" style="display:none;"></span>`;
+    html += `<div class="user-item chat-list-item" data-username="${username}" onclick="openPrivateChat('${username}')">
       ${avatarHtml}
       <div class="chat-list-info">
         <div class="chat-list-row1">
@@ -315,36 +313,12 @@ async function loadUsers() {
         </div>
         <div class="chat-list-row2">
           <span class="chat-list-last">${last.lastSender === currentUser ? '✓ ' : ''}${lastText}</span>
-          <span class="unread-badge" style="display:none;"></span>
+          ${badge}
         </div>
       </div>
-    `;
-    div.onclick = () => openPrivateChat(username);
-    list.appendChild(div);
-  }
-}
-
-async function loadGroups() {
-  const groups = await fetch(`/api/groups/my/${currentUser}`).then(r => r.json());
-  const list = document.getElementById('group-list');
-  list.innerHTML = '';
-  groups.forEach(g => {
-    const div = document.createElement('div');
-    div.className = 'user-item chat-list-item';
-    div.dataset.groupId = g._id;
-    const avatarHtml = g.groupPic
-      ? `<img src="${g.groupPic}" class="chat-list-avatar">`
-      : `<span class="chat-list-initial">👥</span>`;
-    div.innerHTML = `
-      ${avatarHtml}
-      <div class="chat-list-info">
-        <div class="chat-list-row1"><span class="chat-list-name">${g.name}</span></div>
-        <div class="chat-list-row2"><span class="chat-list-last">${g.members.length} members</span></div>
-      </div>
-    `;
-    div.onclick = () => openGroupChat(g._id, g.name, g.members, g.groupPic);
-    list.appendChild(div);
+    </div>`;
   });
+  list.innerHTML = html || '<p style="color:#8696a0;text-align:center;padding:20px;font-size:13px;">No chats yet.<br>Tap 🔍 to search for friends.</p>';
 }
 
 // ============ OPEN CHATS ============
@@ -430,6 +404,7 @@ async function sendMessage() {
       receiver: activeChat, text: encrypted, replyTo: replyPayload,
       disappearSeconds: disappearSeconds > 0 ? disappearSeconds : null
     });
+    setTimeout(() => loadUsers(), 400);
   } else if (activeChatType === 'group' && activeGroupId) {
     socket.emit('group_message', {
       groupId: activeGroupId, text, replyTo: replyPayload,
@@ -771,6 +746,7 @@ socket.on('receive_private', async ({ sender, text, time, msgId, fileUrl, fileTy
     }
   } else {
     markUnread(sender);
+    loadUsers();
   }
 });
 
@@ -1554,7 +1530,3 @@ window.addEventListener('load', () => {
   history.pushState({ page: 'home' }, '');
 });
 
-// Auto-refresh chat list every 10 seconds like WhatsApp
-setInterval(() => {
-  if (currentUser) loadUsers();
-}, 10000);
