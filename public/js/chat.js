@@ -993,6 +993,7 @@ function openSearch() {
   closeAllPanels();
   document.getElementById('search-panel').classList.add('open');
   document.getElementById('search-overlay').classList.add('open');
+  history.pushState({ page: 'panel' }, '');
   document.getElementById('search-input').value = '';
   document.getElementById('search-results').innerHTML = '<p style="color:#8696a0;text-align:center;padding:20px;font-size:13px;">Type a username to search</p>';
   setTimeout(() => document.getElementById('search-input').focus(), 300);
@@ -1484,13 +1485,16 @@ function goBackToChats() {
   document.getElementById('sidebar').classList.remove('mobile-hidden');
   document.getElementById('chat-area').classList.remove('mobile-open');
   activeChat = null; activeChatType = null;
+  loadUsers();
+  loadGroups();
 }
 
 function applyMobileOpen() {
   if (window.innerWidth <= 768) {
-    closeAllPanels(); // Close any open panels before showing chat
+    closeAllPanels();
     document.getElementById('sidebar').classList.add('mobile-hidden');
     document.getElementById('chat-area').classList.add('mobile-open');
+    history.pushState({ page: 'chat' }, '');
   }
 }
 
@@ -1524,3 +1528,33 @@ function closeAllPanels() {
     document.getElementById('sidebar').classList.remove('mobile-hidden');
   }
 }
+
+// ============ ANDROID BACK BUTTON + REAL-TIME REFRESH ============
+window.addEventListener('popstate', function () {
+  const anyPanelOpen = document.querySelector(
+    '#search-panel.open, #privacy-panel.open, #status-panel.open,' +
+    '#post-status-panel.open, #discover-panel.open, #my-profile-panel.open,' +
+    '#contact-info-panel.open, #group-info-panel.open'
+  );
+  if (anyPanelOpen) {
+    closeAllPanels();
+    history.pushState({ page: 'home' }, '');
+    return;
+  }
+  if (window.innerWidth <= 768 &&
+      document.getElementById('chat-area').classList.contains('mobile-open')) {
+    goBackToChats();
+    history.pushState({ page: 'home' }, '');
+    return;
+  }
+});
+
+// Push initial state so back button works from the start
+window.addEventListener('load', () => {
+  history.pushState({ page: 'home' }, '');
+});
+
+// Auto-refresh chat list every 10 seconds like WhatsApp
+setInterval(() => {
+  if (currentUser) loadUsers();
+}, 10000);
