@@ -97,6 +97,18 @@ app.get('/auth/google/callback',
   }
 );
 
+app.get('/sitemap.xml', (req, res) => {
+  res.setHeader('Content-Type', 'application/xml');
+  res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://chat-app-a33b.onrender.com</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>`);
+});
+
 app.get('/ping', (req, res) => res.json({ status: 'alive' }));
 
 app.get('/api/lastmessages/:username', async (req, res) => {
