@@ -144,7 +144,7 @@ async function decrypt(data, username) {
 async function translateText(text, targetLang) {
   if (!text || !targetLang) return null;
   try {
-    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=auto|${targetLang}`;
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|${targetLang}`;
     const res = await fetch(url);
     const data = await res.json();
     if (data.responseStatus === 200 && data.responseData && data.responseData.translatedText) {
@@ -395,10 +395,14 @@ async function sendMessage() {
     const tId = 'temp_' + Date.now();
     showMessage(currentUser, text, new Date().toLocaleTimeString(), tId, false, null, null, null, replyPayload, null, 'sent');
     if (disappearSeconds > 0) {
-      setTimeout(() => {
-        const el = document.querySelector(`[data-msg-id="${tId}"]`);
-        if (el) { el.style.transition = 'opacity 0.5s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 500); }
-      }, disappearSeconds * 1000);
+      const disappearEl = document.querySelector(`[data-msg-id="${tId}"]`);
+      if (disappearEl) {
+        setTimeout(() => {
+          disappearEl.style.transition = 'opacity 0.5s';
+          disappearEl.style.opacity = '0';
+          setTimeout(() => disappearEl.remove(), 500);
+        }, disappearSeconds * 1000);
+      }
     }
     socket.emit('private_message', {
       receiver: activeChat, text: encrypted, replyTo: replyPayload,
@@ -956,11 +960,14 @@ async function uploadProfilePic(input) {
   }
 }
 
+const avatarCache = {};
 async function getUserAvatar(username) {
+  if (avatarCache[username] !== undefined) return avatarCache[username];
   try {
     const res = await fetch(`/api/upload/${username}`);
     const data = await res.json();
-    return data.profilePic || null;
+    avatarCache[username] = data.profilePic || null;
+    return avatarCache[username];
   } catch { return null; }
 }
 
