@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://chat-app-a33b.onrender.com/sitemap.xml
