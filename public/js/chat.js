@@ -1020,29 +1020,58 @@ function closeSearch() {
   }
 }
 
+let _searchController = null;
 async function searchUsers(query) {
   const results = document.getElementById('search-results');
   if (query.length < 1) {
     results.innerHTML = '<p style="color:#8696a0;text-align:center;padding:20px;font-size:13px;">Type a username to search</p>';
     return;
   }
-  const users = await fetch('/api/users').then(r => r.json());
-  const filtered = users.filter(u => u.username !== currentUser && u.username.toLowerCase().includes(query.toLowerCase()));
-  results.innerHTML = '';
-  if (filtered.length === 0) { results.innerHTML = '<p style="color:#8696a0;text-align:center;padding:20px;font-size:13px;">No user found</p>'; return; }
-  for (const u of filtered) {
-    const div = document.createElement('div'); div.className = 'search-result-item';
-    const pic = await getUserAvatar(u.username);
-    const bioRes = await fetch(`/api/users/bio/${u.username}`); const bioData = await bioRes.json();
-    div.innerHTML = pic
-      ? `<img src="${pic}" class="chat-list-avatar"> <div><div style="color:#e9edef;">${u.username}</div><div style="color:#8696a0;font-size:12px;">${bioData.bio || 'Using priconkt'}</div></div>`
-      : `<span class="chat-list-initial">${u.username[0].toUpperCase()}</span> <div><div style="color:#e9edef;">${u.username}</div><div style="color:#8696a0;font-size:12px;">${bioData.bio || 'Using priconkt'}</div></div>`;
-    div.onclick = () => { closeSearch(); openPrivateChat(u.username); };
-    results.appendChild(div);
+
+  // Cancel any previous search still running
+  if (_searchController) _searchController.abort();
+  _searchController = new AbortController();
+
+  try {
+    const users = await fetch('/api/users', { signal: _searchController.signal }).then(r => r.json());
+
+    // Remove duplicates by username
+    const seen = new Set();
+    const unique = users.filter(u => {
+      if (seen.has(u.username)) return false;
+      seen.add(u.username);
+      return true;
+    });
+
+    const filtered = unique.filter(u =>
+      u.username !== currentUser &&
+      u.username.toLowerCase().includes(query.toLowerCase())
+    );
+
+    results.innerHTML = '';
+    if (filtered.length === 0) {
+      results.innerHTML = '<p style="color:#8696a0;text-align:center;padding:20px;font-size:13px;">No user found</p>';
+      return;
+    }
+
+    for (const u of filtered) {
+      const div = document.createElement('div');
+      div.className = 'search-result-item';
+      const pic = await getUserAvatar(u.username);
+      const bioRes = await fetch(`/api/users/bio/${u.username}`);
+      const bioData = await bioRes.json();
+      div.innerHTML = pic
+        ? `<img src="${pic}" class="chat-list-avatar"> <div><div style="color:#e9edef;">${u.username}</div><div style="color:#8696a0;font-size:12px;">${bioData.bio || 'Using priconkt'}</div></div>`
+        : `<span class="chat-list-initial">${u.username[0].toUpperCase()}</span> <div><div style="color:#e9edef;">${u.username}</div><div style="color:#8696a0;font-size:12px;">${bioData.bio || 'Using priconkt'}</div></div>`;
+      div.onclick = () => { closeSearch(); openPrivateChat(u.username); };
+      results.appendChild(div);
+    }
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      results.innerHTML = '<p style="color:#8696a0;text-align:center;padding:20px;font-size:13px;">Search failed. Try again.</p>';
+    }
   }
 }
-
-document.addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
 
 // ============ STATUS ============
 function openStatusTab() {
