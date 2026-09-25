@@ -1185,14 +1185,24 @@ async function toggleVisibility() {
   }
 }
 
+let _visResolve = null;
 function pickVisibilityDuration() {
   return new Promise((resolve) => {
-    const choice = window.prompt('How long do you want to be visible?\nType:\n1 → 15 minutes\n2 → 1 hour\n3 → Until I turn off\n');
-    if (choice === '1') resolve(15);
-    else if (choice === '2') resolve(60);
-    else if (choice === '3') resolve(0);
-    else resolve(null);
+    _visResolve = resolve;
+    document.querySelectorAll('input[name="vis-dur"]').forEach(r => r.checked = false);
+    document.querySelector('input[name="vis-dur"][value="0"]').checked = true;
+    document.getElementById('vis-duration-overlay').style.display = 'flex';
   });
+}
+function confirmVisDuration() {
+  const sel = document.querySelector('input[name="vis-dur"]:checked');
+  const val = sel ? parseInt(sel.value) : 0;
+  document.getElementById('vis-duration-overlay').style.display = 'none';
+  if (_visResolve) { _visResolve(val); _visResolve = null; }
+}
+function cancelVisDuration() {
+  document.getElementById('vis-duration-overlay').style.display = 'none';
+  if (_visResolve) { _visResolve(null); _visResolve = null; }
 }
 
 function openDiscover() {
