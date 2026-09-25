@@ -10,6 +10,15 @@ window.addEventListener('load', () => {
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app-screen').style.display = 'flex';
     document.getElementById('my-username').textContent = '🔐 ' + currentUser;
+    // Show cached chats INSTANTLY before keys even load
+    const cached = localStorage.getItem('chatList_' + currentUser);
+    if (cached) {
+      document.getElementById('user-list').innerHTML = cached;
+      document.querySelectorAll('.user-item.chat-list-item').forEach(div => {
+        const username = div.dataset.username;
+        if (username) div.onclick = () => openPrivateChat(username);
+      });
+    }
     socket.emit('set_username', currentUser);
     generateKeys().then(() => {
       loadUsers(); loadGroups(); loadMyProfilePic(); loadBlockedUsers(); initVisibility(); initPrivacy();
@@ -263,6 +272,17 @@ async function createGroup() {
 
 // ============ LOAD USERS / GROUPS ============
 async function loadUsers() {
+  // Show cached list INSTANTLY while fresh data loads
+  const cached = localStorage.getItem('chatList_' + currentUser);
+  if (cached) {
+    document.getElementById('user-list').innerHTML = cached;
+    document.querySelectorAll('.user-item.chat-list-item').forEach(div => {
+      const username = div.dataset.username;
+      if (username) div.onclick = () => openPrivateChat(username);
+    });
+  }
+
+  // Load fresh data in background
   const [lastMsgs, allUsers] = await Promise.all([
     fetch(`/api/lastmessages/${currentUser}`).then(r => r.json()).catch(() => []),
     fetch('/api/users').then(r => r.json()).catch(() => [])
@@ -272,6 +292,7 @@ async function loadUsers() {
   const list = document.getElementById('user-list');
   if (lastMsgs.length === 0) {
     list.innerHTML = '<p style="color:#8696a0;text-align:center;padding:20px;font-size:13px;">No chats yet.<br>Tap 🔍 to search for friends.</p>';
+    localStorage.removeItem('chatList_' + currentUser);
     return;
   }
   const sorted = lastMsgs
@@ -303,7 +324,9 @@ async function loadUsers() {
       ? `<img src="${pic}" class="chat-list-avatar" onclick="event.stopPropagation();openContactInfo('${username}')">`
       : `<span class="chat-list-initial" onclick="event.stopPropagation();openContactInfo('${username}')">${username[0].toUpperCase()}</span>`;
     const unread = unreadCounts[username];
-    const badge = unread ? `<span class="unread-badge" style="display:flex;">${unread}</span>` : `<span class="unread-badge" style="display:none;"></span>`;
+    const badge = unread
+      ? `<span class="unread-badge" style="display:flex;">${unread}</span>`
+      : `<span class="unread-badge" style="display:none;"></span>`;
     html += `<div class="user-item chat-list-item" data-username="${username}" onclick="openPrivateChat('${username}')">
       ${avatarHtml}
       <div class="chat-list-info">
@@ -318,7 +341,13 @@ async function loadUsers() {
       </div>
     </div>`;
   });
-  list.innerHTML = html || '<p style="color:#8696a0;text-align:center;padding:20px;font-size:13px;">No chats yet.<br>Tap 🔍 to search for friends.</p>';
+  if (html) {
+    list.innerHTML = html;
+    // Save to cache for next time app opens
+    localStorage.setItem('chatList_' + currentUser, html);
+  } else {
+    list.innerHTML = '<p style="color:#8696a0;text-align:center;padding:20px;font-size:13px;">No chats yet.<br>Tap 🔍 to search for friends.</p>';
+  }
 }
 
 // ============ OPEN CHATS ============
