@@ -1,45 +1,33 @@
 const express = require('express');
-const multer = require('multer');
-const path = require('path');
-const User = require('../models/User');
 const router = express.Router();
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, '../../public/uploads'));
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, req.body.username + '_' + Date.now() + ext);
-  }
-});
+const multer = require('multer');
+const User = require('../models/User');
+const { uploadToSupabase } = require('../supabase');
 
 const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) cb(null, true);
-    else cb(new Error('Images only'));
-  }
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }
 });
 
 router.post('/', upload.single('profilePic'), async (req, res) => {
   try {
     const { username } = req.body;
-    const picPath = '/uploads/' + req.file.filename;
-    await User.findOneAndUpdate({ username }, { profilePic: picPath });
-    res.json({ profilePic: picPath });
+    if (!req.file || !username) return res.status(400).json({ error: 'Missing data' });
+    const filename = `avatar_${username}.jpg`;
+    const profilePic = await uploadToSupabase(req.file.buffer, filename, req.file.mimetype);
+    await User.findOneAndUpdate({ username }, { profilePic });
+    res.json({ profilePic });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 
 router.get('/:username', async (req, res) => {
   try {
-    const user = await User.findOne({ username: req.params.username });
+    const user = await User.findOne({ username: req.params.username }).select('profilePic');
     res.json({ profilePic: user?.profilePic || null });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 

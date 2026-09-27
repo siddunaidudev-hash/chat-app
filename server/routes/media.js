@@ -1,43 +1,29 @@
 const express = require('express');
+const router = express.Router();
 const multer = require('multer');
 const path = require('path');
-const router = express.Router();
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, '../../public/uploads'));
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, 'media_' + Date.now() + ext);
-  }
-});
-
-const getFileType = (mimetype) => {
-  if (mimetype.startsWith('image/')) return 'image';
-  if (mimetype.startsWith('video/')) return 'video';
-  if (mimetype.startsWith('audio/')) return 'audio';
-  return 'document';
-};
+const { uploadToSupabase } = require('../supabase');
 
 const upload = multer({
-  storage,
-  limits: { fileSize: 50 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const allowed = ['image/', 'video/', 'audio/', 'application/', 'text/'];
-    const ok = allowed.some(t => file.mimetype.startsWith(t));
-    if (ok) cb(null, true);
-    else cb(new Error('File type not allowed'));
-  }
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }
 });
 
-router.post('/', upload.single('file'), (req, res) => {
+router.post('/', upload.single('file'), async (req, res) => {
   try {
-    const fileUrl = '/uploads/' + req.file.filename;
-    const fileType = getFileType(req.file.mimetype);
+    if (!req.file) return res.status(400).json({ error: 'No file' });
+    const ext = path.extname(req.file.originalname) || '.bin';
+    const filename = `media_${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`;
+    const fileUrl = await uploadToSupabase(req.file.buffer, filename, req.file.mimetype);
+    const mime = req.file.mimetype;
+    let fileType = 'document';
+    if (mime.startsWith('image/')) fileType = 'image';
+    else if (mime.startsWith('video/')) fileType = 'video';
+    else if (mime.startsWith('audio/')) fileType = 'voice';
     res.json({ fileUrl, fileType, fileName: req.file.originalname });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error('Upload error:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
