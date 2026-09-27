@@ -1,25 +1,14 @@
-// ============ FREE TURN + STUN SERVERS (fixes mobile video/audio) ============
+// ============ ICE CONFIG WITH FREE TURN SERVERS ============
 const iceConfig = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    {
-      urls: 'turn:openrelay.metered.ca:80',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    },
-    {
-      urls: 'turns:openrelay.metered.ca:443',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    }
-  ]
+    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turns:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
+  ],
+  iceCandidatePoolSize: 10
 };
 
 let localStream = null;
@@ -28,21 +17,116 @@ let currentCallType = null;
 let currentCallPeer = null;
 let isMuted = false;
 let isCameraOff = false;
+let remoteStream = null;
 
+// ============ HIGH QUALITY VIDEO CONSTRAINTS ============
+function getMediaConstraints(callType) {
+  return {
+    audio: {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      sampleRate: 48000,
+      channelCount: 1
+    },
+    video: callType === 'video' ? {
+      width: { ideal: 1280, max: 1920 },
+      height: { ideal: 720, max: 1080 },
+      frameRate: { ideal: 30, max: 30 },
+      facingMode: 'user'
+    } : false
+  };
+}
+
+// ============ SAFE VIDEO PLAY (fixes mobile autoplay block) ============
+async function safePlay(videoEl) {
+  if (!videoEl) return;
+  videoEl.muted = false;
+  try {
+    await videoEl.play();
+  } catch (e) {
+    // Mobile blocked autoplay — show tap-to-play overlay
+    videoEl.muted = true;
+    try { await videoEl.play(); } catch (e2) {}
+  }
+}
+
+function setRemoteVideo(stream) {
+  remoteStream = stream;
+  const remoteVideo = document.getElementById('remote-video');
+  if (!remoteVideo) return;
+  remoteVideo.srcObject = stream;
+  remoteVideo.style.display = 'block';
+  remoteVideo.onloadedmetadata = () => safePlay(remoteVideo);
+  safePlay(remoteVideo);
+}
+
+// ============ CREATE PEER CONNECTION ============
+function createPeerConnection() {
+  const pc = new RTCPeerConnection(iceConfig);
+
+  pc.onicecandidate = e => {
+    if (e.candidate) {
+      socket.emit('ice_candidate', { to: currentCallPeer, candidate: e.candidate });
+    }
+  };
+
+  pc.ontrack = e => {
+    const stream = e.streams && e.streams[0] ? e.streams[0] : null;
+    if (stream) {
+      setRemoteVideo(stream);
+    } else {
+      // Build stream from tracks
+      if (!remoteStream) remoteStream = new MediaStream();
+      remoteStream.addTrack(e.track);
+      setRemoteVideo(remoteStream);
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    const nameEl = document.getElementById('call-with-name');
+    if (pc.connectionState === 'connected') {
+      if (nameEl) nameEl.style.color = '#00a884';
+      // Boost video quality after connection
+      if (currentCallType === 'video') boostVideoQuality(pc);
+    } else if (pc.connectionState === 'failed') {
+      alert('Call connection lost. Please try again.');
+      endCall();
+    }
+  };
+
+  pc.onicegatheringstatechange = () => console.log('ICE:', pc.iceGatheringState);
+  return pc;
+}
+
+// ============ BOOST VIDEO BITRATE AFTER CONNECTION ============
+function boostVideoQuality(pc) {
+  try {
+    const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+    if (!sender) return;
+    const params = sender.getParameters();
+    if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
+    params.encodings[0].maxBitrate = 2500000;   // 2.5 Mbps
+    params.encodings[0].maxFramerate = 30;
+    params.encodings[0].scaleResolutionDownBy = 1.0;
+    sender.setParameters(params).catch(() => {});
+  } catch (e) {}
+}
+
+// ============ START CALL (Caller) ============
 async function startCall(callType) {
   if (!activeChat || activeChatType !== 'private') return;
   currentCallType = callType;
   currentCallPeer = activeChat;
+  remoteStream = null;
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 },
-      video: callType === 'video' ? { width: 640, height: 480, facingMode: 'user' } : false
-    });
+    localStream = await navigator.mediaDevices.getUserMedia(getMediaConstraints(callType));
     showCallScreen(currentUser, activeChat, callType);
+
     const localVideo = document.getElementById('local-video');
     localVideo.srcObject = localStream;
     localVideo.muted = true;
-    await localVideo.play().catch(() => {});
+    await safePlay(localVideo);
 
     peerConnection = createPeerConnection();
     localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
@@ -59,67 +143,28 @@ async function startCall(callType) {
   }
 }
 
-function createPeerConnection() {
-  const pc = new RTCPeerConnection(iceConfig);
-
-  pc.onicecandidate = e => {
-    if (e.candidate) {
-      socket.emit('ice_candidate', { to: currentCallPeer, candidate: e.candidate });
-    }
-  };
-
-  pc.ontrack = e => {
-    const remoteVideo = document.getElementById('remote-video');
-    if (e.streams && e.streams[0]) {
-      remoteVideo.srcObject = e.streams[0];
-    } else {
-      if (!remoteVideo.srcObject) remoteVideo.srcObject = new MediaStream();
-      remoteVideo.srcObject.addTrack(e.track);
-    }
-    remoteVideo.play().catch(() => {});
-  };
-
-  pc.onconnectionstatechange = () => {
-    const state = pc.connectionState;
-    const nameEl = document.getElementById('call-with-name');
-    if (state === 'connected') {
-      if (nameEl) nameEl.style.color = '#00a884';
-    } else if (state === 'failed' || state === 'disconnected') {
-      if (nameEl) nameEl.style.color = '#e53935';
-      alert('Call connection lost. Please try again.');
-      endCall();
-    }
-  };
-
-  pc.onicegatheringstatechange = () => {
-    console.log('ICE gathering:', pc.iceGatheringState);
-  };
-
-  return pc;
-}
-
+// ============ INCOMING CALL ============
 socket.on('incoming_call', async ({ from, offer, callType }) => {
   currentCallPeer = from;
   currentCallType = callType;
-  document.getElementById('caller-name').textContent = '📞 ' + from + ' is calling...';
-  document.getElementById('call-type-label').textContent =
-    callType === 'video' ? '📹 Video Call' : '🎙️ Voice Call';
+  remoteStream = null;
+  document.getElementById('caller-name').textContent = (callType === 'video' ? '📹' : '📞') + ' ' + from + ' is calling...';
+  document.getElementById('call-type-label').textContent = callType === 'video' ? '📹 Video Call' : '🎙️ Voice Call';
   document.getElementById('incoming-call').style.display = 'flex';
   window._pendingOffer = offer;
 });
 
+// ============ ANSWER CALL (Receiver) ============
 async function answerCall() {
   document.getElementById('incoming-call').style.display = 'none';
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 },
-      video: currentCallType === 'video' ? { width: 640, height: 480, facingMode: 'user' } : false
-    });
+    localStream = await navigator.mediaDevices.getUserMedia(getMediaConstraints(currentCallType));
     showCallScreen(currentUser, currentCallPeer, currentCallType);
+
     const localVideo = document.getElementById('local-video');
     localVideo.srcObject = localStream;
     localVideo.muted = true;
-    await localVideo.play().catch(() => {});
+    await safePlay(localVideo);
 
     peerConnection = createPeerConnection();
     localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
@@ -142,9 +187,8 @@ socket.on('call_answered', async ({ answer }) => {
 
 socket.on('ice_candidate', async ({ candidate }) => {
   if (peerConnection && candidate) {
-    try {
-      await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-    } catch (e) { console.log('ICE error:', e); }
+    try { await peerConnection.addIceCandidate(new RTCIceCandidate(candidate)); }
+    catch (e) { console.log('ICE error:', e); }
   }
 });
 
@@ -154,18 +198,17 @@ function rejectCall() {
   currentCallPeer = null;
 }
 
-socket.on('call_rejected', () => {
-  alert(currentCallPeer + ' rejected the call.');
-  endCall();
-});
-
+socket.on('call_rejected', () => { alert('Call rejected.'); endCall(); });
 socket.on('call_ended', () => endCall());
 
 function endCall() {
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
   if (peerConnection) { peerConnection.close(); peerConnection = null; }
+  remoteStream = null;
   const callScreen = document.getElementById('call-screen');
   if (callScreen) callScreen.style.display = 'none';
+  const remoteVideo = document.getElementById('remote-video');
+  if (remoteVideo) { remoteVideo.srcObject = null; }
   if (currentCallPeer) socket.emit('call_end', { to: currentCallPeer });
   currentCallPeer = null;
   isMuted = false; isCameraOff = false;
@@ -180,11 +223,13 @@ function showCallScreen(me, other, callType) {
   const localVideo = document.getElementById('local-video');
   const remoteVideo = document.getElementById('remote-video');
   callScreen.style.display = 'flex';
-  document.getElementById('call-with-name').textContent =
-    (callType === 'video' ? '📹' : '📞') + ' ' + other;
+  document.getElementById('call-with-name').textContent = (callType === 'video' ? '📹' : '📞') + ' ' + other;
   if (callType === 'video') {
     localVideo.style.display = 'block';
     remoteVideo.style.display = 'block';
+    // Style local video as small picture-in-picture
+    localVideo.style.cssText = 'display:block;position:absolute;bottom:90px;right:12px;width:100px;height:140px;object-fit:cover;border-radius:12px;border:2px solid #00a884;z-index:10;';
+    remoteVideo.style.cssText = 'display:block;width:100%;height:100%;object-fit:cover;background:#000;';
   } else {
     localVideo.style.display = 'none';
     remoteVideo.style.display = 'none';
@@ -212,23 +257,17 @@ async function startGroupCall(callType) {
   if (!activeGroupId) return;
   currentGroupCallId = activeGroupId;
   try {
-    groupLocalStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true },
-      video: callType === 'video'
-    });
+    groupLocalStream = await navigator.mediaDevices.getUserMedia(getMediaConstraints(callType));
     const myVideo = document.createElement('video');
     myVideo.srcObject = groupLocalStream;
-    myVideo.autoplay = true; myVideo.muted = true; myVideo.playsinline = true;
+    myVideo.autoplay = true; myVideo.muted = true; myVideo.playsInline = true;
     myVideo.id = 'local-group-video';
-    myVideo.play().catch(() => {});
+    await safePlay(myVideo);
     document.getElementById('group-videos').appendChild(myVideo);
-    document.getElementById('group-call-title').textContent =
-      (callType === 'video' ? '📹' : '📞') + ' Group Call';
+    document.getElementById('group-call-title').textContent = (callType === 'video' ? '📹' : '📞') + ' Group Call';
     document.getElementById('group-call-screen').style.display = 'flex';
     socket.emit('group_call_join', { groupId: activeGroupId, callType });
-  } catch (err) {
-    alert('Could not access camera/microphone');
-  }
+  } catch (err) { alert('Could not access camera/microphone'); }
 }
 
 socket.on('group_call_user_joined', async ({ username }) => {
@@ -236,10 +275,8 @@ socket.on('group_call_user_joined', async ({ username }) => {
   const pc = new RTCPeerConnection(iceConfig);
   groupPeers[username] = pc;
   groupLocalStream.getTracks().forEach(t => pc.addTrack(t, groupLocalStream));
-  pc.onicecandidate = e => {
-    if (e.candidate) socket.emit('group_ice_candidate', { to: username, candidate: e.candidate });
-  };
-  pc.ontrack = e => addGroupVideo(username, e.streams[0] || new MediaStream([e.track]));
+  pc.onicecandidate = e => { if (e.candidate) socket.emit('group_ice_candidate', { to: username, candidate: e.candidate }); };
+  pc.ontrack = e => addGroupVideo(username, e.streams[0] || (() => { const s = new MediaStream(); s.addTrack(e.track); return s; })());
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
   socket.emit('group_call_offer', { to: username, offer });
@@ -250,10 +287,8 @@ socket.on('group_call_offer', async ({ from, offer }) => {
   const pc = new RTCPeerConnection(iceConfig);
   groupPeers[from] = pc;
   groupLocalStream.getTracks().forEach(t => pc.addTrack(t, groupLocalStream));
-  pc.onicecandidate = e => {
-    if (e.candidate) socket.emit('group_ice_candidate', { to: from, candidate: e.candidate });
-  };
-  pc.ontrack = e => addGroupVideo(from, e.streams[0] || new MediaStream([e.track]));
+  pc.onicecandidate = e => { if (e.candidate) socket.emit('group_ice_candidate', { to: from, candidate: e.candidate }); };
+  pc.ontrack = e => addGroupVideo(from, e.streams[0] || (() => { const s = new MediaStream(); s.addTrack(e.track); return s; })());
   await pc.setRemoteDescription(new RTCSessionDescription(offer));
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
@@ -278,9 +313,9 @@ socket.on('group_call_user_left', ({ username }) => {
 
 function addGroupVideo(username, stream) {
   const vid = document.createElement('video');
-  vid.srcObject = stream; vid.autoplay = true; vid.playsinline = true;
+  vid.srcObject = stream; vid.autoplay = true; vid.playsInline = true;
   vid.id = 'group-vid-' + username;
-  vid.play().catch(() => {});
+  safePlay(vid);
   document.getElementById('group-videos').appendChild(vid);
 }
 
@@ -298,8 +333,7 @@ function toggleGroupMute() {
     const track = groupLocalStream.getAudioTracks()[0];
     if (track) {
       track.enabled = !track.enabled;
-      document.getElementById('group-mute-btn').textContent =
-        track.enabled ? '🎙️ Mute' : '🔇 Unmute';
+      document.getElementById('group-mute-btn').textContent = track.enabled ? '🎙️ Mute' : '🔇 Unmute';
     }
   }
 }
