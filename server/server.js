@@ -126,6 +126,30 @@ app.get('/auth/google/callback',
   }
 );
 
+// ============ ADMIN ANALYTICS ============
+app.get('/admin/stats', async (req, res) => {
+  try {
+    const [totalUsers, totalMessages, totalGroups] = await Promise.all([
+      User.countDocuments(),
+      Message.countDocuments(),
+      Group.countDocuments()
+    ]);
+    const activeNow = Object.keys(onlineUsers).length;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const todayMessages = await Message.countDocuments({ createdAt: { $gte: today } });
+    const todayUsers = await User.countDocuments({ createdAt: { $gte: today } });
+    res.json({
+      totalUsers,
+      totalMessages,
+      totalGroups,
+      activeNow,
+      todayMessages,
+      todayNewUsers: todayUsers,
+      onlineUsers: Object.keys(onlineUsers)
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/ping', (req, res) => res.json({ status: 'alive' }));
 
 app.get('/sitemap.xml', (req, res) => {
