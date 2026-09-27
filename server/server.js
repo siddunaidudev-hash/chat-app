@@ -46,6 +46,9 @@ const io = new Server(server, {
   reconnectionDelay: 1000
 });
 
+const compression = require('compression');
+app.use(compression());
+
 app.use(express.json({ limit: '10mb' }));
 app.use(session({
   secret: process.env.SESSION_SECRET || 'secret',
@@ -228,7 +231,14 @@ app.delete('/api/auth/delete-account', async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 10000 })
+mongoose.connect(process.env.MONGO_URI, {
+  serverSelectionTimeoutMS: 10000,
+  maxPoolSize: 20,
+  minPoolSize: 5,
+  socketTimeoutMS: 45000,
+  connectTimeoutMS: 10000,
+  retryWrites: true
+})
   .then(() => console.log('Database connected!'))
   .catch(err => console.log('DB Error:', err));
 
