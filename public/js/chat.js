@@ -279,7 +279,47 @@ async function loadUsers() {
     document.getElementById('user-list').innerHTML = cached;
     document.querySelectorAll('.user-item.chat-list-item').forEach(div => {
       const username = div.dataset.username;
-      if (username) div.onclick = () => openPrivateChat(username);
+      if (username) {
+        div.onclick = () => openPrivateChat(username);
+        
+        // Long press to delete chat
+        let _pressTimer;
+        div.addEventListener('touchstart', () => {
+          _pressTimer = setTimeout(() => {
+            if (confirm('Delete chat with ' + username + '?')) {
+              fetch(`/api/clearchat/${currentUser}/${username}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: currentUser })
+              }).then(() => {
+                if (activeChat === username) {
+                  document.getElementById('messages').innerHTML = '';
+                }
+                loadUsers();
+              });
+            }
+          }, 700);
+        });
+        div.addEventListener('touchend', () => clearTimeout(_pressTimer));
+        div.addEventListener('touchmove', () => clearTimeout(_pressTimer));
+        
+        // Right click to delete chat
+        div.addEventListener('contextmenu', e => {
+          e.preventDefault();
+          if (confirm('Delete chat with ' + username + '?')) {
+            fetch(`/api/clearchat/${currentUser}/${username}`, {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ username: currentUser })
+            }).then(() => { 
+              if (activeChat === username) {
+                  document.getElementById('messages').innerHTML = '';
+              }
+              loadUsers(); 
+            });
+          }
+        });
+      }
     });
   }
 
@@ -344,8 +384,50 @@ async function loadUsers() {
   });
   if (html) {
     list.innerHTML = html;
-    // Save to cache for next time app opens
     localStorage.setItem('chatList_' + currentUser, html);
+    
+    // Attach listeners to the newly generated fresh data
+    document.querySelectorAll('#user-list .user-item.chat-list-item').forEach(div => {
+      const username = div.dataset.username;
+      if (username) {
+        // (We already set the onclick attribute in the HTML string, so we just add the advanced listeners)
+        let _pressTimer;
+        div.addEventListener('touchstart', () => {
+          _pressTimer = setTimeout(() => {
+            if (confirm('Delete chat with ' + username + '?')) {
+              fetch(`/api/clearchat/${currentUser}/${username}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: currentUser })
+              }).then(() => {
+                if (activeChat === username) {
+                  document.getElementById('messages').innerHTML = '';
+                }
+                loadUsers();
+              });
+            }
+          }, 700);
+        });
+        div.addEventListener('touchend', () => clearTimeout(_pressTimer));
+        div.addEventListener('touchmove', () => clearTimeout(_pressTimer));
+        
+        div.addEventListener('contextmenu', e => {
+          e.preventDefault();
+          if (confirm('Delete chat with ' + username + '?')) {
+            fetch(`/api/clearchat/${currentUser}/${username}`, {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ username: currentUser })
+            }).then(() => { 
+              if (activeChat === username) {
+                  document.getElementById('messages').innerHTML = '';
+              }
+              loadUsers(); 
+            });
+          }
+        });
+      }
+    });
   } else {
     list.innerHTML = '<p style="color:#8696a0;text-align:center;padding:20px;font-size:13px;">No chats yet.<br>Tap 🔍 to search for friends.</p>';
   }
@@ -1494,7 +1576,9 @@ function playVoice(btn, audioUrl) {
 // ============ UNIVERSAL TRANSLATION ============
 function setTranslateLang(lang) {
   translateTo = lang;
-  const sel = document.getElementById('translate-lang'); if (sel) sel.style.color = lang ? '#00a884' : '#8696a0';
+  if (activeChat) localStorage.setItem('translateLang_' + activeChat, lang);
+  const sel = document.getElementById('translate-lang');
+  if (sel) sel.style.color = lang ? '#00a884' : '#8696a0';
   if (lang) translateVisibleMessages();
 }
 
