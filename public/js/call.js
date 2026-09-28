@@ -27,7 +27,9 @@ function getMediaConstraints(callType) {
       noiseSuppression: true,
       autoGainControl: true,
       sampleRate: 48000,
-      channelCount: 1
+      channelCount: 1,
+      latency: 0,
+      volume: 1.0
     },
     video: callType === 'video' ? {
       width: { ideal: 1280, max: 1920 },
@@ -55,10 +57,20 @@ function setRemoteVideo(stream) {
   remoteStream = stream;
   const remoteVideo = document.getElementById('remote-video');
   if (!remoteVideo) return;
+  remoteVideo.setAttribute('playsinline', '');
+  remoteVideo.setAttribute('autoplay', '');
+  remoteVideo.muted = false;
   remoteVideo.srcObject = stream;
   remoteVideo.style.display = 'block';
-  remoteVideo.onloadedmetadata = () => safePlay(remoteVideo);
+  remoteVideo.style.background = '#000';
+  remoteVideo.onloadedmetadata = () => {
+    safePlay(remoteVideo);
+  };
+  remoteVideo.onclick = () => safePlay(remoteVideo);
   safePlay(remoteVideo);
+  // Retry play after 1 second in case autoplay blocked
+  setTimeout(() => safePlay(remoteVideo), 1000);
+  setTimeout(() => safePlay(remoteVideo), 3000);
 }
 
 // ============ CREATE PEER CONNECTION ============
@@ -87,8 +99,10 @@ function createPeerConnection() {
     const nameEl = document.getElementById('call-with-name');
     if (pc.connectionState === 'connected') {
       if (nameEl) nameEl.style.color = '#00a884';
-      // Boost video quality after connection
+      boostAudioQuality(pc);
       if (currentCallType === 'video') boostVideoQuality(pc);
+      // Boost audio quality after connection
+      if (currentCallType === 'audio') boostAudioQuality(pc);
     } else if (pc.connectionState === 'failed') {
       alert('Call connection lost. Please try again.');
       endCall();
@@ -100,6 +114,17 @@ function createPeerConnection() {
 }
 
 // ============ BOOST VIDEO BITRATE AFTER CONNECTION ============
+function boostAudioQuality(pc) {
+  try {
+    const sender = pc.getSenders().find(s => s.track && s.track.kind === 'audio');
+    if (!sender) return;
+    const params = sender.getParameters();
+    if (!params.encodings) params.encodings = [{}];
+    params.encodings[0].maxBitrate = 128000;
+    sender.setParameters(params).catch(() => {});
+  } catch (e) {}
+}
+
 function boostVideoQuality(pc) {
   try {
     const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
@@ -130,6 +155,7 @@ async function startCall(callType) {
 
     peerConnection = createPeerConnection();
     localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
+    _callStartTime = Date.now();
 
     const offer = await peerConnection.createOffer({
       offerToReceiveAudio: true,
@@ -157,9 +183,12 @@ socket.on('incoming_call', async ({ from, offer, callType }) => {
 // ============ ANSWER CALL (Receiver) ============
 async function answerCall() {
   document.getElementById('incoming-call').style.display = 'none';
+  const peer = currentCallPeer;
+  const callType = currentCallType;
+  _callStartTime = Date.now();
   try {
-    localStream = await navigator.mediaDevices.getUserMedia(getMediaConstraints(currentCallType));
-    showCallScreen(currentUser, currentCallPeer, currentCallType);
+    localStream = await navigator.mediaDevices.getUserMedia(getMediaConstraints(callType));
+    showCallScreen(currentUser, peer, callType);
 
     const localVideo = document.getElementById('local-video');
     localVideo.srcObject = localStream;
@@ -168,11 +197,12 @@ async function answerCall() {
 
     peerConnection = createPeerConnection();
     localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
-
+   
+    _callStartTime = Date.now();
     await peerConnection.setRemoteDescription(new RTCSessionDescription(window._pendingOffer));
     const answer = await peerConnection.createAnswer();
     await peerConnection.setLocalDescription(answer);
-    socket.emit('call_answer', { to: currentCallPeer, answer });
+    socket.emit('call_answer', { to: peer, answer });
   } catch (err) {
     alert('Could not access camera/microphone: ' + err.message);
     endCall();
@@ -201,7 +231,11 @@ function rejectCall() {
 socket.on('call_rejected', () => { alert('Call rejected.'); endCall(); });
 socket.on('call_ended', () => endCall());
 
+let _callStartTime = null;
 function endCall() {
+  const peer = currentCallPeer;
+  const type = currentCallType;
+
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
   if (peerConnection) { peerConnection.close(); peerConnection = null; }
   remoteStream = null;
@@ -209,13 +243,39 @@ function endCall() {
   if (callScreen) callScreen.style.display = 'none';
   const remoteVideo = document.getElementById('remote-video');
   if (remoteVideo) { remoteVideo.srcObject = null; }
-  if (currentCallPeer) socket.emit('call_end', { to: currentCallPeer });
+  if (peer) socket.emit('call_end', { to: peer });
   currentCallPeer = null;
   isMuted = false; isCameraOff = false;
   const muteBtn = document.getElementById('mute-btn');
   const camBtn = document.getElementById('cam-btn');
   if (muteBtn) muteBtn.textContent = '🎙️ Mute';
   if (camBtn) camBtn.textContent = '📷 Camera';
+
+  // Show call history in chat
+  if (peer && activeChatType === 'private') {
+    const duration = _callStartTime ? Math.floor((Date.now() - _callStartTime) / 1000) : 0;
+    const mins = Math.floor(duration / 60);
+    const secs = String(duration % 60).padStart(2, '0');
+    const durationStr = duration > 0 ? ` — ${mins}:${secs}` : '';
+    const callMsg = type === 'video'
+      ? `📹 Video call${durationStr}`
+      : `📞 Voice call${durationStr}`;
+    showMessage(currentUser, callMsg, new Date().toLocaleTimeString(),
+      'call_' + Date.now(), false, null, 'call', null, null, null, 'sent');
+    socket.emit('private_message', {
+      receiver: peer, text: callMsg, fileType: 'call', fileUrl: type
+    });
+  }
+  _callStartTime = null;
+
+  // Rejoin socket after call — fixes message delay after call
+  setTimeout(() => {
+    if (currentUser) socket.emit('set_username', currentUser);
+    if (activeGroupId) socket.emit('join_group', activeGroupId);
+    if (activeChat && activeChatType === 'private') {
+      socket.emit('mark_read', { chatPartner: activeChat });
+    }
+  }, 800);
 }
 
 function showCallScreen(me, other, callType) {

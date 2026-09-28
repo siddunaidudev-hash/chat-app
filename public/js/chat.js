@@ -362,6 +362,14 @@ async function openPrivateChat(username) {
   activeGroupId = null;
   activeGroupName = null;
   cancelReply();
+  // Restore saved translation language for this chat
+  const savedLang = localStorage.getItem('translateLang_' + username) || '';
+  translateTo = savedLang;
+  const sel = document.getElementById('translate-lang');
+  if (sel) {
+    sel.value = savedLang;
+    sel.style.color = savedLang ? '#00a884' : '#8696a0';
+  }
   document.getElementById('chat-with').textContent = '🔐 ' + username + ' — E2E Encrypted';
   document.getElementById('chat-sub').textContent = '';
   document.getElementById('group-info-btn').style.display = 'none';
@@ -560,7 +568,9 @@ function showMessage(sender, text, time, msgId = null, isDeleted = false,
   bubble.dataset.msgSender = sender;
   bubble.dataset.isMine = isMine ? '1' : '0';
   bubble.dataset.status = status || 'sent';
-  const fileHtml = renderFileContent(fileUrl, fileType, fileName);
+  const fileHtml = fileType === 'call'
+    ? `<div style="color:#8696a0;font-size:13px;font-style:italic;">${text}</div>`
+    : renderFileContent(fileUrl, fileType, fileName);
   const replyHtml = renderReplyPreview(replyTo);
   const dotsHtml = getDotsHtml(status, isMine);
   const fwdHtml = forwardedFrom ? `<span class="fwd-label">➡️ Forwarded</span>` : '';
