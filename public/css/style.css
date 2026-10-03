@@ -1821,3 +1821,248 @@ input:checked + .toggle-slider {
 #bio-char-count {
   color: var(--text-muted) !important;
 }
+
+/* ===== FIX HEADER BUTTONS - NOT CIRCLES ===== */
+#search-header button,
+#privacy-header button,
+#status-panel-header button,
+#post-status-header button,
+#discover-header button,
+#my-profile-header button,
+#contact-info-header button,
+#group-info-header button,
+#back-btn,
+#status-view-header button {
+  background: none !important;
+  background-color: transparent !important;
+  border: none !important;
+  color: #94A3B8 !important;
+  width: auto !important;
+  height: auto !important;
+  border-radius: 0 !important;
+  padding: 6px 10px !important;
+  font-size: 20px !important;
+  box-shadow: none !important;
+  animation: none !important;
+  min-width: unset !important;
+}
+
+/* Save button in profile header - Orange text */
+#save-profile-btn {
+  color: #FF6B00 !important;
+  font-weight: bold !important;
+  font-size: 15px !important;
+}
+
+/* Save button in privacy header */
+#privacy-header button:last-child {
+  color: #FF6B00 !important;
+  font-weight: bold !important;
+  font-size: 15px !important;
+}
+
+/* Status Add button */
+#status-panel-header button:last-child {
+  color: #FF6B00 !important;
+  font-weight: bold !important;
+  font-size: 15px !important;
+}
+
+/* Disappear picker cancel button */
+#disappear-picker button:not(#disappear-options button) {
+  background: var(--charcoal-interactive) !important;
+  color: #94A3B8 !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 8px 16px !important;
+  animation: none !important;
+}
+
+/* Theme picker close button */
+#theme-picker > div > button {
+  background: var(--charcoal-interactive) !important;
+  color: #94A3B8 !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 8px 16px !important;
+  animation: none !important;
+}
+
+/* Chat header buttons */
+#chat-header button,
+#chat-header select {
+  background: none !important;
+  background-color: transparent !important;
+  border: none !important;
+  color: #94A3B8 !important;
+  width: auto !important;
+  height: auto !important;
+  border-radius: 0 !important;
+  padding: 4px 8px !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+
+/* Group action buttons */
+#group-action-btns button {
+  background: var(--charcoal-interactive) !important;
+  color: #FFFFFF !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  width: 100% !important;
+  height: auto !important;
+  padding: 12px !important;
+  font-size: 14px !important;
+  animation: none !important;
+  box-shadow: none !important;
+}
+
+#exit-group-btn {
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: #EF4444 !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+/* Contact block button */
+#block-btn {
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: #EF4444 !important;
+  border: 1px solid rgba(239, 68, 68, 0.3) !important;
+  border-radius: 8px !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 10px 20px !important;
+  animation: none !important;
+}
+
+/* Logout button */
+#privacy-body button:nth-of-type(1) {
+  background: var(--charcoal-interactive) !important;
+  color: #FFFFFF !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  height: auto !important;
+  width: 100% !important;
+  animation: none !important;
+}
+
+/* Delete account button */
+#privacy-body button:nth-of-type(2) {
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: #EF4444 !important;
+  border: 1px solid rgba(239, 68, 68, 0.3) !important;
+  border-radius: 8px !important;
+  height: auto !important;
+  width: 100% !important;
+  animation: none !important;
+}
+
+/* Attach button */
+#attach-btn {
+  background: none !important;
+  background-color: transparent !important;
+  color: #94A3B8 !important;
+  width: auto !important;
+  height: auto !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  animation: none !important;
+  font-size: 22px !important;
+}
+
+/* Mic button */
+#mic-btn {
+  background: none !important;
+  background-color: transparent !important;
+  color: #FF6B00 !important;
+  width: auto !important;
+  height: auto !important;
+  border-radius: 50% !important;
+  box-shadow: none !important;
+  font-size: 22px !important;
+}
+
+/* Forward cancel button */
+#forward-box button {
+  background: var(--charcoal-interactive) !important;
+  color: #94A3B8 !important;
+  border: 1px solid var(--border) !important;
+  width: auto !important;
+  height: auto !important;
+  border-radius: 8px !important;
+  padding: 10px 20px !important;
+  animation: none !important;
+}
+
+/* Incoming call buttons */
+#incoming-call-box button {
+  width: auto !important;
+  height: auto !important;
+  border-radius: 12px !important;
+  padding: 12px 24px !important;
+  font-size: 15px !important;
+  animation: none !important;
+}
+
+/* Vis toggle btn */
+#vis-toggle-btn {
+  background: #FF6B00 !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 8px !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 8px 14px !important;
+  font-size: 13px !important;
+  animation: none !important;
+}
+
+/* Status color picker */
+#status-color-picker button {
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 50% !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+
+/* Filter buttons - keep pill shape */
+.filter-btn {
+  border-radius: 20px !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 4px 14px !important;
+  animation: none !important;
+}
+
+/* Tab buttons */
+.tab-btn {
+  width: auto !important;
+  height: auto !important;
+  border-radius: 0 !important;
+  background: none !important;
+  animation: none !important;
+  box-shadow: none !important;
+}
+
+/* Better text visibility everywhere */
+.chat-list-name,
+#chat-with,
+h2, h3, strong,
+.privacy-section-title,
+.profile-field label {
+  text-shadow: none !important;
+  opacity: 1 !important;
+}
+
+#my-status-section p,
+#others-status-section p {
+  color: #FFAA00 !important;
+  font-weight: 600 !important;
+  letter-spacing: 1px !important;
+}

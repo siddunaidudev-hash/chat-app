@@ -18,16 +18,47 @@
 
 <div id="auth-screen">
   <div id="auth-box">
-    <img src="/icons/icon-192.png" style="width:80px;height:80px;border-radius:20px;margin-bottom:8px;">
-    <h2 style="color:#00a884;font-size:24px;font-weight:bold;">Priconkt</h2>
-    <p style="color:#8696a0;font-size:12px;margin-top:-8px;">Private. Secure. Connected.</p>
-    <input type="text" id="auth-username" placeholder="Username">
-    <input type="password" id="auth-password" placeholder="Password">
-    <button onclick="register()">Register</button>
-    <button onclick="login()">Login</button>
-    <div id="divider">— or —</div>
-    <button id="google-btn" onclick="window.location.href='/auth/google'">🔵 Continue with Google</button>
-    <p id="auth-message"></p>
+    <!-- App icon + name row -->
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+      <img src="/icons/icon-192.png" style="width:48px;height:48px;border-radius:12px;border:1px solid rgba(255,107,0,0.4);">
+      <div style="flex:1;">
+        <div style="color:#FFFFFF;font-size:20px;font-weight:800;letter-spacing:0.5px;line-height:1.2;">Priconkt</div>
+        <div style="color:#64748B;font-size:11px;margin-top:2px;">Private. Secure. Connected.</div>
+      </div>
+      <span style="background:#064e3b;color:#10B981;border:1px solid #10B981;border-radius:4px;font-size:10px;padding:2px 8px;font-weight:bold;flex-shrink:0;">E2EE</span>
+    </div>
+
+    <!-- Username field -->
+    <div style="position:relative;">
+      <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#64748B;font-size:16px;pointer-events:none;">👤</span>
+      <input type="text" id="auth-username" placeholder="Username or Email" style="width:100%;padding:13px 16px 13px 42px;background:#12141C;border:1px solid #1E293B;border-radius:10px;color:#FFFFFF;font-size:15px;outline:none;">
+    </div>
+
+    <!-- Password field -->
+    <div style="position:relative;">
+      <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#64748B;font-size:16px;pointer-events:none;">🔒</span>
+      <input type="password" id="auth-password" placeholder="Password" style="width:100%;padding:13px 16px 13px 42px;background:#12141C;border:1px solid #1E293B;border-radius:10px;color:#FFFFFF;font-size:15px;outline:none;">
+    </div>
+
+    <!-- Login + Register side by side -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <button onclick="login()" style="background:linear-gradient(135deg,#FF6B00,#FFAA00);color:white;border:none;border-radius:10px;padding:13px;font-size:15px;font-weight:bold;cursor:pointer;width:100%;height:auto;box-shadow:0 4px 16px rgba(255,107,0,0.4);">1. Login →</button>
+      <button onclick="register()" style="background:transparent;color:#FFAA00;border:1px solid #FFAA00;border-radius:10px;padding:13px;font-size:15px;font-weight:bold;cursor:pointer;width:100%;height:auto;">2. Register</button>
+    </div>
+
+    <!-- Divider -->
+    <div id="divider" style="text-align:center;color:#64748B;font-size:12px;letter-spacing:1px;position:relative;margin:4px 0;">
+      <span style="background:#0E1017;padding:0 12px;position:relative;z-index:1;">OR CONTINUE WITH GOOGLE</span>
+      <div style="position:absolute;top:50%;left:0;right:0;height:1px;background:#1E293B;z-index:0;"></div>
+    </div>
+
+    <!-- Google button -->
+    <button id="google-btn" onclick="window.location.href='/auth/google'" style="background:#12141C;color:#FFFFFF;border:1px solid #1E293B;border-radius:10px;padding:13px 16px;font-size:14px;cursor:pointer;width:100%;height:auto;display:flex;align-items:center;justify-content:center;gap:10px;animation:none;">
+      <span style="font-size:18px;">G</span>
+      <span style="font-weight:500;">Continue with Google Mail</span>
+    </button>
+
+    <p id="auth-message" style="color:#EF4444;font-size:13px;text-align:center;min-height:18px;"></p>
   </div>
 </div>
 
