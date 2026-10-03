@@ -157,6 +157,22 @@ app.get('/admin/stats', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Demo sandbox — auto login
+app.post('/api/auth/demo', async (req, res) => {
+  try {
+    const jwt = require('jsonwebtoken');
+    let demoUser = await User.findOne({ username: 'priconkt_demo' });
+    if (!demoUser) {
+      const bcrypt = require('bcryptjs');
+      const hash = await bcrypt.hash('demo_pass_2026', 10);
+      demoUser = new User({ username: 'priconkt_demo', password: hash, bio: 'Demo account — explore priconkt!' });
+      await demoUser.save();
+    }
+    const token = jwt.sign({ id: demoUser._id, username: 'priconkt_demo' }, process.env.JWT_SECRET, { expiresIn: '2h' });
+    res.json({ token, username: 'priconkt_demo' });
+  } catch (e) { res.status(500).json({ message: e.message }); }
+});
+
 app.get('/ping', (req, res) => res.json({ status: 'alive' }));
 
 app.get('/sitemap.xml', (req, res) => {
@@ -335,6 +351,11 @@ io.on('connection', (socket) => {
     try {
       const sender = socket.username;
       if (!sender || !groupId) return;
+      const grp = await Group.findById(groupId).lean();
+      if (grp && grp.memberRoles) {
+        const role = grp.memberRoles[sender];
+        if (role === 'readonly') { socket.emit('group_message_blocked', { reason: 'You are read-only in this group' }); return; }
+      }
       const disappearsAt = disappearSeconds ? new Date(Date.now() + disappearSeconds * 1000) : null;
       const msg = new GroupMessage({ groupId, sender, text: text || '', disappearsAt });
       await msg.save();

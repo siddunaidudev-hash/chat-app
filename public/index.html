@@ -79,6 +79,11 @@
     Continue with Google Mail
   </button>
 
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
+      <button onclick="launchDemo()" style="background:none!important;border:none!important;color:#64748B!important;font-size:12px!important;cursor:pointer!important;width:auto!important;height:auto!important;padding:0!important;text-decoration:underline;animation:none!important;box-shadow:none!important;">Quick exploration?</button>
+      <button onclick="launchDemo()" style="background:none!important;border:none!important;color:#FF6B00!important;font-size:12px!important;cursor:pointer!important;width:auto!important;height:auto!important;padding:0!important;animation:none!important;box-shadow:none!important;">⚡ Launch Demo Session</button>
+    </div>
+  
   <p id="auth-message" style="color:#EF4444;font-size:13px;text-align:center;margin-top:12px;min-height:18px;"></p>
 
 </div>
@@ -427,11 +432,13 @@
       <h3>Disappearing Messages</h3>
       <p style="color:#8696a0;font-size:13px;">Message auto-deletes after:</p>
       <div id="disappear-options">
-        <button onclick="setDisappearTimer(0)">Off</button>
-        <button onclick="setDisappearTimer(10)">10 sec</button>
-        <button onclick="setDisappearTimer(60)">1 min</button>
-        <button onclick="setDisappearTimer(3600)">1 hour</button>
-        <button onclick="setDisappearTimer(86400)">1 day</button>
+        <button onclick="setDisappearTimer(0)">⛔ Off</button>
+        <button onclick="setDisappearTimer(10)">⚡ 10 seconds</button>
+        <button onclick="setDisappearTimer(30)">⚡ 30 seconds</button>
+        <button onclick="setDisappearTimer(60)">⏱️ 1 minute</button>
+        <button onclick="setDisappearTimer(300)">⏱️ 5 minutes</button>
+        <button onclick="setDisappearTimer(3600)">🕐 1 hour</button>
+        <button onclick="setDisappearTimer(86400)">📅 24 hours</button>
       </div>
       <button onclick="closeDisappearPicker()" style="margin-top:12px;background:#2a3942;color:#8696a0;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;width:auto;height:auto;">Cancel</button>
     </div>

@@ -9,6 +9,10 @@ router.post('/create', async (req, res) => {
   try {
     const { name, members, createdBy } = req.body;
     const group = new Group({ name, members, createdBy });
+const roles = {};
+roles[createdBy] = 'admin';
+members.filter(m => m !== createdBy).forEach(m => roles[m] = 'member');
+group.memberRoles = roles;
     await group.save();
     res.json(group);
   } catch (err) {

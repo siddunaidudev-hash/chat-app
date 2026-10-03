@@ -165,6 +165,26 @@ async function translateText(text, targetLang) {
 }
 
 // ============ AUTH ============
+async function launchDemo() {
+  const res = await fetch('/api/auth/demo', { method: 'POST' });
+  const data = await res.json();
+  if (data.token) {
+    currentUser = data.username;
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('username', data.username);
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app-screen').style.display = 'flex';
+    document.getElementById('my-username').textContent = '👁️ ' + currentUser + ' (Demo)';
+    socket.emit('set_username', currentUser);
+    await generateKeys();
+    loadUsers(); loadGroups(); loadMyProfilePic(); loadBlockedUsers(); initVisibility(); initPrivacy();
+    // Show demo banner
+    const banner = document.createElement('div');
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:linear-gradient(135deg,#FF6B00,#FFAA00);color:white;text-align:center;padding:6px;font-size:12px;font-weight:bold;z-index:9999;';
+    banner.textContent = '⚡ Demo Mode — 2 hours session. Register to save your data.';
+    document.body.appendChild(banner);
+  }
+}
 async function register() {
   const username = document.getElementById('auth-username').value.trim();
   const password = document.getElementById('auth-password').value.trim();
@@ -600,9 +620,21 @@ async function sendContact() {
 }
 
 // ============ RENDER FILE ============
+function getFileIcon(fileName) {
+  if (!fileName) return '📄';
+  const ext = fileName.split('.').pop().toLowerCase();
+  const icons = { pdf:'📕', doc:'📘', docx:'📘', xls:'📗', xlsx:'📗', ppt:'📙', pptx:'📙', txt:'📃', zip:'🗜️', rar:'🗜️', mp3:'🎵', mp4:'🎬', jpg:'🖼️', jpeg:'🖼️', png:'🖼️', gif:'🎞️' };
+  return icons[ext] || '📄';
+}
+function getFileColor(fileName) {
+  if (!fileName) return '#64748B';
+  const ext = fileName.split('.').pop().toLowerCase();
+  const colors = { pdf:'#EF4444', doc:'#3B82F6', docx:'#3B82F6', xls:'#10B981', xlsx:'#10B981', ppt:'#F59E0B', pptx:'#F59E0B', zip:'#8B5CF6', rar:'#8B5CF6' };
+  return colors[ext] || '#64748B';
+}
 function renderFileContent(fileUrl, fileType, fileName) {
   if (!fileUrl) return '';
-  if (fileType === 'image') return `<img src="${fileUrl}" style="max-width:220px;max-height:220px;border-radius:8px;cursor:pointer;display:block;margin-top:4px;" onclick="window.open('${fileUrl}','_blank')">`;
+  if (fileType === 'image') return `<img src="${fileUrl}" style="max-width:220px;max-height:220px;border-radius:8px;cursor:pointer;display:block;margin-top:4px;border:1px solid rgba(255,107,0,0.2);" onclick="window.open('${fileUrl}','_blank')">`;
   if (fileType === 'video') return `<video controls style="max-width:220px;border-radius:8px;display:block;margin-top:4px;"><source src="${fileUrl}">Video not supported.</video>`;
   if (fileType === 'audio' || fileType === 'voice') {
     const transcript = fileName && fileName !== 'Voice message' ? fileName : '';
@@ -618,7 +650,19 @@ function renderFileContent(fileUrl, fileType, fileName) {
       return `<div style="background:rgba(0,168,132,0.15);padding:10px;border-radius:8px;margin-top:4px;border-left:3px solid #00a884;"><div style="font-weight:bold;color:#e9edef;">👤 ${c.name}</div><div style="font-size:12px;color:#8696a0;">${c.phone}</div></div>`;
     } catch { return ''; }
   }
-  return `<a href="${fileUrl}" download="${fileName || 'file'}" target="_blank" style="color:#00a884;display:flex;align-items:center;gap:6px;margin-top:4px;text-decoration:none;">📄 <span>${fileName || 'Download'}</span></a>`;
+  const icon = getFileIcon(fileName);
+  const color = getFileColor(fileName);
+  const ext = fileName ? fileName.split('.').pop().toUpperCase() : 'FILE';
+  return `<a href="${fileUrl}" download="${fileName || 'file'}" target="_blank" style="text-decoration:none;display:block;margin-top:6px;">
+    <div style="background:#12141C;border:1px solid #1E293B;border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px;max-width:220px;transition:border-color 0.2s;">
+      <div style="width:38px;height:38px;background:${color}22;border:1px solid ${color}44;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">${icon}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="color:#FFFFFF;font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${fileName || 'File'}</div>
+        <div style="color:#64748B;font-size:11px;margin-top:2px;">${ext} • Tap to download</div>
+      </div>
+      <div style="color:#FF6B00;font-size:18px;flex-shrink:0;">⬇️</div>
+    </div>
+  </a>`;
 }
 
 function renderReplyPreview(replyTo) {
@@ -939,9 +983,15 @@ async function openGroupInfo() {
     const div = document.createElement('div');
     div.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 16px;';
     const pic = await getUserAvatar(m);
-    div.innerHTML = pic
-      ? `<img src="${pic}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;"> <span style="color:#e9edef;">${m}${m === currentUser ? ' (You)' : ''}</span>`
-      : `<span style="width:36px;height:36px;border-radius:50%;background:#00a884;color:white;display:flex;align-items:center;justify-content:center;font-weight:bold;">${m[0].toUpperCase()}</span><span style="color:#e9edef;">${m}${m === currentUser ? ' (You)' : ''}</span>`;
+    const role = group.memberRoles ? (group.memberRoles[m] || 'member') : 'member';
+const roleBadge = role === 'admin'
+  ? `<span style="background:rgba(255,107,0,0.2);color:#FF6B00;border:1px solid rgba(255,107,0,0.4);border-radius:4px;font-size:10px;padding:1px 6px;font-weight:bold;">ADMIN</span>`
+  : role === 'readonly'
+  ? `<span style="background:rgba(100,116,139,0.2);color:#64748B;border:1px solid #1E293B;border-radius:4px;font-size:10px;padding:1px 6px;">READ-ONLY</span>`
+  : `<span style="background:rgba(16,185,129,0.15);color:#10B981;border:1px solid rgba(16,185,129,0.3);border-radius:4px;font-size:10px;padding:1px 6px;">MEMBER</span>`;
+div.innerHTML = pic
+  ? `<img src="${pic}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;"> <span style="color:#FFFFFF;flex:1;">${m}${m === currentUser ? ' (You)' : ''}</span>${roleBadge}`
+  : `<span style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#FF6B00,#FFAA00);color:white;display:flex;align-items:center;justify-content:center;font-weight:bold;flex-shrink:0;">${m[0].toUpperCase()}</span><span style="color:#FFFFFF;flex:1;">${m}${m === currentUser ? ' (You)' : ''}</span>${roleBadge}`;
     membersList.appendChild(div);
   }
   const allUsers = await fetch('/api/users').then(r => r.json());
