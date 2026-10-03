@@ -564,7 +564,10 @@ async function sendMediaFiles(input, type) {
           socket.emit('group_message', { groupId: activeGroupId, text: '', fileUrl: data.fileUrl, fileType: data.fileType, fileName: data.fileName });
         }
       }
-    } catch (err) { console.error('Upload failed:', err); }
+    } catch (err) {
+  console.error('Upload failed:', err);
+  alert('Failed to send file: ' + err.message);
+}
   }
 }
 
@@ -1730,4 +1733,3 @@ window.addEventListener('popstate', function () {
 window.addEventListener('load', () => {
   history.pushState({ page: 'home' }, '');
 });
-
