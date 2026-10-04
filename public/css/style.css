@@ -1347,15 +1347,15 @@ body {
 
 /* Sent messages - dark orange */
 .message-bubble.sent {
-  background: linear-gradient(135deg, #3D1500, #4A1A00) !important;
-  border: 1px solid rgba(255, 107, 0, 0.3) !important;
+  background: #1A0A00 !important;
+  border: 1px solid rgba(255, 107, 0, 0.2) !important;
   color: #FFFFFF !important;
 }
 
 /* Received messages */
 .message-bubble.received {
-  background: var(--carbon-container) !important;
-  border: 1px solid var(--border) !important;
+  background: #0E1017 !important;
+  border: 1px solid #1E293B !important;
   color: #FFFFFF !important;
 }
 
@@ -2065,4 +2065,130 @@ h2, h3, strong,
   color: #FFAA00 !important;
   font-weight: 600 !important;
   letter-spacing: 1px !important;
+}
+
+/* ===== CORRECT COLOR PROPORTIONS ===== */
+/* Cyber Orange #FF6B00 = only 3-5% of screen */
+/* Most UI = Obsidian blacks */
+
+/* Primary buttons ONLY get full orange */
+#input-area button:last-child,
+#scan-now-btn,
+#post-status-submit {
+  background: linear-gradient(135deg, #FF6B00, #FFAA00) !important;
+}
+
+/* Secondary interactive buttons = dark, NOT orange */
+#group-action-btns button,
+#disappear-options button,
+.attach-opt,
+#forward-box button,
+#add-member-box button {
+  background: #12141C !important;
+  border: 1px solid #1E293B !important;
+  color: #FFFFFF !important;
+  animation: none !important;
+  box-shadow: none !important;
+}
+
+/* Create group button = subtle orange outline only */
+#create-group-box button,
+#group-name-inline + button {
+  background: transparent !important;
+  border: 1px solid #FF6B00 !important;
+  color: #FF6B00 !important;
+  animation: none !important;
+  box-shadow: none !important;
+}
+
+/* Mic button = NOT orange circle */
+#mic-btn {
+  background: none !important;
+  border: none !important;
+  color: #94A3B8 !important;
+  width: auto !important;
+  height: auto !important;
+  box-shadow: none !important;
+  animation: none !important;
+  border-radius: 0 !important;
+}
+
+/* Attach button = NOT orange */
+#attach-btn {
+  background: none !important;
+  border: none !important;
+  color: #94A3B8 !important;
+  animation: none !important;
+  box-shadow: none !important;
+}
+
+/* Status color picker = small circles, no glow */
+#status-color-picker button {
+  animation: none !important;
+  box-shadow: none !important;
+}
+
+/* Voice play button = small orange only */
+.voice-play-btn {
+  background: #FF6B00 !important;
+  width: 32px !important;
+  height: 32px !important;
+  animation: none !important;
+}
+
+/* Tab buttons = NO orange background */
+.tab-btn {
+  background: none !important;
+  box-shadow: none !important;
+  animation: none !important;
+  color: #64748B !important;
+}
+
+.tab-btn.active {
+  color: #FF6B00 !important;
+  border-bottom: 2px solid #FF6B00 !important;
+  background: none !important;
+}
+
+/* Filter buttons = pill shape, dark */
+.filter-btn {
+  background: #12141C !important;
+  color: #94A3B8 !important;
+  animation: none !important;
+}
+
+.filter-btn.active {
+  background: #FF6B00 !important;
+  color: white !important;
+}
+
+/* Call control buttons */
+#mute-btn, #group-mute-btn {
+  background: #12141C !important;
+  border: 1px solid #1E293B !important;
+  color: #FFFFFF !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 10px 18px !important;
+  border-radius: 10px !important;
+  animation: none !important;
+  box-shadow: none !important;
+}
+
+/* End call = red */
+#call-controls button:nth-child(2) {
+  background: #EF4444 !important;
+  color: white !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 10px 18px !important;
+  border-radius: 10px !important;
+  animation: none !important;
+  border: none !important;
+}
+
+/* Send button glow = softer */
+@keyframes orangeGlow {
+  0%, 100% { box-shadow: 0 2px 8px rgba(255,107,0,0.3); }
+  50% { box-shadow: 0 2px 14px rgba(255,107,0,0.5); }
 }
