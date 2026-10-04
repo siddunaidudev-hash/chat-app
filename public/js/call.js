@@ -284,6 +284,8 @@ function showCallScreen(me, other, callType) {
   const remoteVideo = document.getElementById('remote-video');
   callScreen.style.display = 'flex';
   document.getElementById('call-with-name').textContent = (callType === 'video' ? '📹' : '📞') + ' ' + other;
+  const camBtn = document.getElementById('cam-btn');
+  if (camBtn) camBtn.style.display = callType === 'video' ? 'flex' : 'none';
   if (callType === 'video') {
     localVideo.style.display = 'block';
     remoteVideo.style.display = 'block';

@@ -490,6 +490,13 @@ async function openPrivateChat(username) {
       continue;
     }
     if (m.deletedFor && m.deletedFor.includes(currentUser)) continue;
+    // Call history — never encrypted, show as-is
+    if (m.fileType === 'call') {
+      const callText = m.text || (m.fileUrl === 'video' ? '📹 Video call' : '📞 Voice call');
+      showMessage(m.sender, callText, new Date(m.createdAt).toLocaleTimeString(),
+        m._id, false, null, 'call', null, null, null, m.status);
+      continue;
+    }
     const other = m.sender === currentUser ? username : m.sender;
     const text = m.text ? await decrypt(m.text, other) : '';
     showMessage(m.sender, text, new Date(m.createdAt).toLocaleTimeString(),
@@ -565,13 +572,40 @@ function toggleAttachPanel() {
   panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
 }
 
+async function compressImage(file) {
+  if (!file.type.startsWith('image/')) return file;
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX = 1200;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+          else { width = Math.round(width * MAX / height); height = MAX; }
+        }
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        canvas.toBlob(blob => resolve(blob || file), 'image/jpeg', 0.82);
+      };
+      img.onerror = () => resolve(file);
+      img.src = e.target.result;
+    };
+    reader.onerror = () => resolve(file);
+    reader.readAsDataURL(file);
+  });
+}
+
 async function sendMediaFiles(input, type) {
   const files = input.files;
   if (!files.length) return;
   document.getElementById('attachment-panel').style.display = 'none';
   for (const file of files) {
+    const compressed = await compressImage(file);
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', compressed, file.name);
     try {
       const res = await fetch('/api/media', { method: 'POST', body: formData });
       const data = await res.json();
@@ -900,7 +934,7 @@ socket.on('receive_private', async ({ sender, text, time, msgId, fileUrl, fileTy
         }, msLeft);
       }
     }
-    if (translateTo && decrypted && fileType !== 'voice') {
+    if (translateTo && decrypted && fileType !== 'voice' && fileType !== 'call' && decrypted !== '[old message]') {
       setTimeout(async () => {
         const translated = await translateText(decrypted, translateTo);
         if (translated && translated !== decrypted) {
